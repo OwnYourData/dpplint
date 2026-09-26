@@ -1,0 +1,101 @@
+openapi: 3.0.1
+info:
+  title: dpplint API
+  version: v1
+  description: >-
+    Checks the digital product passport data retrievable for a product
+    identifier against the automated passport criteria of
+    https://github.com/OwnYourData/dpp-criteria. Results report how many
+    automated checks passed; they are no certification and establish no
+    presumption of conformity.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+paths:
+  /api/v1/validate/{productId}:
+    get:
+      summary: Retrieve the passport for a product identifier and check it
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product identifier as HTTPS URL, for example https://dpp.oydapp.eu/01/09520123456788/21/000001
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Check results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "422":
+          description: The passport could not be retrieved
+  /api/v1/validate:
+    post:
+      summary: Check a passport sent as JSON
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Check results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "422":
+          description: The body is not a JSON object
+  /version:
+    get:
+      summary: Versions of dpplint, dpp-criteria and the SOyA web-cli
+      responses:
+        "200":
+          description: Version information
+components:
+  schemas:
+    Report:
+      type: object
+      properties:
+        productId:
+          type: string
+        retrieval:
+          type: object
+          nullable: true
+          properties:
+            productId: { type: string }
+            url: { type: string }
+            status: { type: integer }
+            contentType: { type: string }
+        summary:
+          type: object
+          properties:
+            text: { type: string, example: "7 of 7 automated checks passed" }
+            passed: { type: integer }
+            failed: { type: integer }
+            warnings: { type: integer }
+            skipped: { type: integer }
+        criteria:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, example: DPP-DAT-014 }
+              title: { type: string }
+              level: { type: string, enum: [MUST, SHOULD, MAY] }
+              result: { type: string, enum: [passed, warning, failed, skipped] }
+              reason: { type: string }
+              messages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    severity: { type: string, enum: [violation, warning, info] }
+                    message: { type: string }
+        notice:
+          type: string
+        dpp-criteria:
+          type: string

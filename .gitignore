@@ -1,0 +1,7 @@
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/criteria
+/structures
+/CRITERIA_REF

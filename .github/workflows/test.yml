@@ -1,0 +1,16 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image with dpp-criteria main
+        run: ./build.sh
+      - name: Test suite inside the image
+        run: docker run --rm --platform linux/amd64 oydeu/dpplint:latest test
