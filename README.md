@@ -10,6 +10,9 @@ and do not establish a presumption of conformity.
 
 ## How it works
 
+- `/` is a start page: enter a product identifier (the URL encoded in the data
+  carrier) and see the result per criterion. `/?productId=<identifier>` runs
+  the check directly and can be linked.
 - `GET /api/v1/validate/<product identifier>` retrieves the passport like a
   phone scanning a data carrier (plain HTTPS GET, no credentials) and checks it.
 - `POST /api/v1/validate` checks a passport sent as JSON.
@@ -47,6 +50,12 @@ curl -s http://localhost:3000/api/v1/validate/https://dpp.oydapp.eu/01/095201234
 `./build.sh <ref>` builds with a given commit or tag of dpp-criteria; the
 default is `main`. `GET /version` shows the commit in use. The image is built
 for linux/amd64, like the SOyA web-cli it contains.
+
+## Deployment
+
+`kubernetes/` holds the manifests for dpplint.ownyourdata.eu: deployment,
+service, certificate (cert-manager, issuer `letsencrypt-prod`) and ingress
+(nginx).
 
 ## Tests
 

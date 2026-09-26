@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>dpplint – Digital Product Passport checks</title>
+  <style>
+    :root { --fg: #1d2330; --muted: #5b6475; --line: #d9dde5; --bg: #ffffff; --panel: #f5f7fa;
+            --pass: #1f7a3f; --warn: #9a6500; --fail: #b3261e; --skip: #6b7280; --accent: #2457a6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 16px 48px; }
+    h1 { font-size: 1.8rem; margin: 0 0 4px; }
+    p.lead { color: var(--muted); margin: 0 0 24px; }
+    form { display: flex; gap: 8px; flex-wrap: wrap; }
+    input[type=url] { flex: 1 1 420px; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--line); border-radius: 6px; }
+    button { padding: 10px 18px; font-size: 1rem; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: default; }
+    .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
+    a { color: var(--accent); }
+    .hint a { cursor: pointer; overflow-wrap: anywhere; }
+    .scroll { overflow-x: auto; }
+    #status { margin: 24px 0 8px; color: var(--muted); }
+    .summary { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .summary strong { font-size: 1.2rem; }
+    .notice { color: var(--muted); font-size: .9rem; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
+    th { font-size: .85rem; color: var(--muted); font-weight: 600; }
+    td.id { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 600; color: #fff; }
+    .passed { background: var(--pass); } .warning { background: var(--warn); } .failed { background: var(--fail); } .skipped { background: var(--skip); }
+    ul.msg { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: .9rem; }
+    footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }
+    footer a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>dpplint</h1>
+  <p class="lead">Checks the digital product passport retrievable for a product identifier against the automated passport criteria of
+    <a href="https://github.com/OwnYourData/dpp-criteria">dpp-criteria</a> (EN 18219, EN 18223 and related regulation).</p>
+
+  <form id="form">
+    <input type="url" id="productId" name="productId" required placeholder="https://… (product identifier from the data carrier)" value="<%= @product_id %>">
+    <button type="submit" id="run">Check</button>
+  </form>
+  <p class="hint">Example: <a id="example">https://dpp.oydapp.eu/01/09520123456788/21/000001</a></p>
+
+  <div id="status"></div>
+  <div id="result"></div>
+
+  <footer>
+    Results report automated checks only. They are no certification and establish no presumption of conformity.<br>
+    Criteria: dpp-criteria <%= @criteria_ref %> ·
+    <a href="/api-docs">API</a> ·
+    <a href="https://github.com/OwnYourData/dpplint">Source</a> ·
+    a service of <a href="https://www.ownyourdata.eu">OwnYourData</a>
+  </footer>
+</main>
+<script>
+  const form = document.getElementById("form");
+  const input = document.getElementById("productId");
+  const button = document.getElementById("run");
+  const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const order = { failed: 0, warning: 1, passed: 2, skipped: 3 };
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const render = (d) => {
+    const retrieval = d.retrieval || {};
+    const rows = [...d.criteria].sort((a, b) => order[a.result] - order[b.result] || a.id.localeCompare(b.id)).map((c) => {
+      const notes = (c.messages || []).map((m) => `<li>${esc(m.message)}</li>`).join("") + (c.reason ? `<li>${esc(c.reason)}</li>` : "");
+      return `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.title)}${notes ? `<ul class="msg">${notes}</ul>` : ""}</td>
+              <td>${esc(c.level)}</td><td><span class="badge ${esc(c.result)}">${esc(c.result)}</span></td></tr>`;
+    }).join("");
+    resultEl.innerHTML = `
+      <div class="summary"><strong>${esc(d.summary.text)}</strong>
+        (${d.summary.failed} failed, ${d.summary.warnings} with warnings, ${d.summary.skipped} not applicable or not checked)
+        <div class="notice" style="overflow-wrap:anywhere">Retrieved: ${esc(retrieval.url)} · HTTP ${esc(retrieval.status)} · ${esc(retrieval.contentType)}${retrieval.error ? " · " + esc(retrieval.error) : ""}</div>
+        <div class="notice">${esc(d.notice)}</div></div>
+      <div class="scroll"><table><thead><tr><th>Criterion</th><th>Requirement and findings</th><th>Level</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  };
+
+  const run = async (productId) => {
+    button.disabled = true;
+    resultEl.innerHTML = "";
+    statusEl.textContent = "Retrieving and checking the passport …";
+    history.replaceState(null, "", "?productId=" + encodeURIComponent(productId));
+    try {
+      const res = await fetch("/api/v1/validate/" + productId, { headers: { Accept: "application/json" } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+      statusEl.textContent = "";
+      render(data);
+    } catch (e) {
+      statusEl.textContent = "The check could not be run: " + e.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  form.addEventListener("submit", (e) => { e.preventDefault(); run(input.value.trim()); });
+  document.getElementById("example").addEventListener("click", (e) => { input.value = e.target.textContent; run(input.value); });
+  if (input.value) run(input.value);
+</script>
+</body>
+</html>

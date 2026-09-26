@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dpplint-tls
+spec:
+  secretName: dpplint-tls
+  issuerRef:
+    group: cert-manager.io
+    name: letsencrypt-prod
+    kind: Issuer
+  dnsNames:
+  - dpplint.ownyourdata.eu

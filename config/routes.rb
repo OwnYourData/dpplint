@@ -9,6 +9,7 @@ Rails.application.routes.draw do
     end
   end
 
+  root "home#show"
   get "version", to: "application#version"
   get "up",      to: "rails/health#show", as: :rails_health_check
 end

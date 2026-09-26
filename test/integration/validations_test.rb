@@ -59,6 +59,14 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  test "start page offers the form and keeps a given product identifier" do
+    get "/", params: { productId: "https://dpp.example.org/01/09520123456788" }
+    assert_response :success
+    assert_includes response.body, 'id="productId"'
+    assert_includes response.body, 'value="https://dpp.example.org/01/09520123456788"'
+    assert_includes response.body, "no certification"
+  end
+
   test "version names service, criteria and web-cli" do
     get "/version"
     body = JSON.parse(response.body)
