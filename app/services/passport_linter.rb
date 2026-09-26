@@ -3,22 +3,26 @@
 # Criteria with check.type shacl are validated through the SOyA web-cli:
 # acquire and validate against the structure named in the criterion. A result
 # belongs to a criterion when its message starts with "[<criterion ID>]".
+# Criteria with check.type resolve request the product identifier itself and
+# therefore need one (GET /api/v1/validate/<product identifier>).
 class PassportLinter
   SH = "http://www.w3.org/ns/shacl#".freeze
 
-  def initialize(catalogue: CriteriaCatalogue.new, web_cli: SoyaWebCli.new)
+  def initialize(catalogue: CriteriaCatalogue.new, web_cli: SoyaWebCli.new, resolver: HttpResolver.new)
     @catalogue = catalogue
     @web_cli = web_cli
+    @resolver = resolver
   end
 
-  def run(passport:, product_id: nil, fetch: nil)
+  def run(passport:, product_id: nil, retrieval: nil)
+    @product_id = product_id
     reports = {}
     criteria = @catalogue.passport_criteria.map { |c| evaluate(c, passport, reports) }
     counted = criteria.select { |c| %w[passed warning failed].include?(c[:result]) }
     passed = counted.count { |c| c[:result] != "failed" }
     {
-      productId: product_id || passport["uniqueProductIdentifier"],
-      retrieval: fetch,
+      productId: product_id || passport&.dig("uniqueProductIdentifier"),
+      retrieval: retrieval,
       summary: {
         text: "#{passed} of #{counted.size} automated checks passed",
         passed: passed,
@@ -38,10 +42,13 @@ class PassportLinter
     base = { id: criterion["id"], title: criterion["title"], level: criterion["level"] }
     check = criterion["check"] || {}
 
+    return resolve(base, check) if check["type"] == "resolve"
+    return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version") unless check["type"] == "shacl"
+    return base.merge(result: "skipped", reason: "passport could not be retrieved") if passport.nil?
+
     if criterion["applies_if"] && !AppliesIf.holds?(criterion["applies_if"], passport)
       return base.merge(result: "skipped", reason: "condition not met")
     end
-    return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version") unless check["type"] == "shacl"
     return base.merge(result: "skipped", reason: "no shapes available for #{check['shapes_select']}") unless check["structure"]
 
     report = (reports[check["structure"]] ||= validate(check["structure"], passport))
@@ -54,6 +61,14 @@ class PassportLinter
              else "passed"
              end
     base.merge(result: result, messages: messages)
+  end
+
+  def resolve(base, check)
+    return base.merge(result: "skipped", reason: "rated by dpp-validator from its daily runs") if check["history"]
+    return base.merge(result: "skipped", reason: "needs a product identifier") if @product_id.blank?
+
+    messages = ResolveCheck.new(check, @product_id, @resolver).violations.map { |m| { severity: "violation", message: m } }
+    base.merge(result: messages.empty? ? "passed" : "failed", messages: messages)
   end
 
   def validate(structure, passport)

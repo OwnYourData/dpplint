@@ -6,10 +6,10 @@ module Api
         product_id = params[:product_id].to_s
         product_id += "?#{request.query_string}" if request.query_string.present?
         product_id = product_id.sub(%r{\A(https?):/(?!/)}, '\1://')
-        fetch = PassportFetcher.new.fetch(product_id)
-        render json: PassportLinter.new.run(passport: fetch.json, product_id: product_id, fetch: fetch.to_h)
-      rescue PassportFetcher::Error => e
-        render json: { productId: product_id, error: e.message }, status: :unprocessable_entity
+        resolver = HttpResolver.new
+        fetch = PassportFetcher.new(resolver).fetch(product_id)
+        render json: PassportLinter.new(resolver: resolver)
+          .run(passport: fetch.json, product_id: product_id, retrieval: fetch.info)
       end
 
       # POST /api/v1/validate with a passport as JSON body

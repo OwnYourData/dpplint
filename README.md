@@ -18,6 +18,11 @@ and do not establish a presumption of conformity.
   SOyA web-cli endpoints `acquire` and `validate` for the structure named in
   the criterion. Results belong to a criterion by the criterion ID at the start
   of each message.
+- Criteria with `check.type: resolve` request the product identifier
+  themselves (with the Accept header the criterion names) and need
+  `GET /api/v1/validate/<product identifier>`; with `POST` they are skipped.
+- Check types not implemented yet (`did`, `proof`, `links`) and criteria whose
+  condition does not hold are reported as `skipped`.
 - API documentation: `/api-docs`.
 
 The image contains everything it needs at run time: the Rails API, the SOyA

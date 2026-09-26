@@ -40,6 +40,14 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_equal "skipped", criterion(lint(reference), "DPP-ID-010")["result"]
   end
 
+  test "checks that request the product identifier need one" do
+    result = lint(reference)
+    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016].each do |id|
+      assert_equal "skipped", criterion(result, id)["result"], id
+    end
+    assert_equal "rated by dpp-validator from its daily runs", criterion(result, "DPP-ID-002")["reason"]
+  end
+
   test "invalid JSON is rejected" do
     post "/api/v1/validate", params: "{not json", headers: { "Content-Type" => "application/json" }
     assert_response :unprocessable_entity
