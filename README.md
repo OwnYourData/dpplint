@@ -21,7 +21,13 @@ and do not establish a presumption of conformity.
 - Criteria with `check.type: resolve` request the product identifier
   themselves (with the Accept header the criterion names) and need
   `GET /api/v1/validate/<product identifier>`; with `POST` they are skipped.
-- Check types not implemented yet (`did`, `proof`, `links`) and criteria whose
+- Criteria with `check.type: did` send the DIDs of the passport to
+  [didlint](https://didlint.ownyourdata.eu) (DID Core, DID Resolution) and
+  check linked verifiable presentations for the VC Data Model 2.0 context. The
+  didlint instance is set with `DIDLINT_URL` (default
+  `https://didlint.ownyourdata.eu`); it is the only service dpplint calls
+  besides the passport and the resources it links.
+- Check types not implemented yet (`proof`, `links`) and criteria whose
   condition does not hold are reported as `skipped`.
 - API documentation: `/api-docs`.
 

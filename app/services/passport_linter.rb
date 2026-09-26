@@ -4,14 +4,16 @@
 # acquire and validate against the structure named in the criterion. A result
 # belongs to a criterion when its message starts with "[<criterion ID>]".
 # Criteria with check.type resolve request the product identifier itself and
-# therefore need one (GET /api/v1/validate/<product identifier>).
+# therefore need one (GET /api/v1/validate/<product identifier>). Criteria with
+# check.type did hand the DIDs of the passport to didlint.
 class PassportLinter
   SH = "http://www.w3.org/ns/shacl#".freeze
 
-  def initialize(catalogue: CriteriaCatalogue.new, web_cli: SoyaWebCli.new, resolver: HttpResolver.new)
+  def initialize(catalogue: CriteriaCatalogue.new, web_cli: SoyaWebCli.new, resolver: HttpResolver.new, didlint: Didlint.new)
     @catalogue = catalogue
     @web_cli = web_cli
     @resolver = resolver
+    @didlint = didlint
   end
 
   def run(passport:, product_id: nil, retrieval: nil)
@@ -43,8 +45,11 @@ class PassportLinter
     check = criterion["check"] || {}
 
     return resolve(base, check) if check["type"] == "resolve"
-    return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version") unless check["type"] == "shacl"
+    unless %w[shacl did].include?(check["type"])
+      return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version")
+    end
     return base.merge(result: "skipped", reason: "passport could not be retrieved") if passport.nil?
+    return did(base, check, passport) if check["type"] == "did"
 
     if criterion["applies_if"] && !AppliesIf.holds?(criterion["applies_if"], passport)
       return base.merge(result: "skipped", reason: "condition not met")
@@ -56,11 +61,7 @@ class PassportLinter
 
     own = report[:results].select { |r| r[:message].start_with?("[#{criterion['id']}]") }
     messages = own.map { |r| { severity: r[:severity], message: r[:message].delete_prefix("[#{criterion['id']}]").strip } }
-    result = if messages.any? { |m| m[:severity] == "violation" } then "failed"
-             elsif messages.any? then "warning"
-             else "passed"
-             end
-    base.merge(result: result, messages: messages)
+    base.merge(result: result_for(messages), messages: messages)
   end
 
   def resolve(base, check)
@@ -69,6 +70,23 @@ class PassportLinter
 
     messages = ResolveCheck.new(check, @product_id, @resolver).violations.map { |m| { severity: "violation", message: m } }
     base.merge(result: messages.empty? ? "passed" : "failed", messages: messages)
+  end
+
+  def did(base, check, passport)
+    did_check = DidCheck.new(check, passport, didlint: @didlint, resolver: @resolver)
+    return base.merge(result: "skipped", reason: "no DID in #{check['paths'].join(', ')}") if did_check.dids.empty?
+
+    messages = did_check.messages
+    base.merge(result: result_for(messages), messages: messages)
+  rescue Didlint::Unavailable => e
+    base.merge(result: "skipped", reason: e.message)
+  end
+
+  def result_for(messages)
+    if messages.any? { |m| m[:severity] == "violation" } then "failed"
+    elsif messages.any? then "warning"
+    else "passed"
+    end
   end
 
   def validate(structure, passport)
