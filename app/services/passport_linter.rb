@@ -75,8 +75,13 @@ class PassportLinter
     return base.merge(result: "skipped", reason: "rated by dpp-validator from its daily runs") if check["history"]
     return base.merge(result: "skipped", reason: "needs a product identifier") if @product_id.blank?
 
-    messages = ResolveCheck.new(check, @product_id, @resolver).violations.map { |m| { severity: "violation", message: m } }
-    base.merge(result: messages.empty? ? "passed" : "failed", messages: messages)
+    resolve_check = ResolveCheck.new(check, @product_id, @resolver)
+    if (keys = resolve_check.unsupported).any?
+      return base.merge(result: "skipped", reason: "expect #{keys.join(', ')} is not evaluated for check type resolve in this version")
+    end
+
+    messages = resolve_check.messages
+    base.merge(result: result_for(messages), messages: messages)
   end
 
   def did(base, check, passport)
@@ -106,6 +111,8 @@ class PassportLinter
     base.merge(result: result_for(messages), messages: messages)
   end
 
+  # failed if a check with severity error (a violation) fails, otherwise
+  # warning if a check with severity warning fails, otherwise passed.
   def result_for(messages)
     if messages.any? { |m| m[:severity] == "violation" } then "failed"
     elsif messages.any? then "warning"

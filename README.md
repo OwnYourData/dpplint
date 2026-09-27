@@ -26,6 +26,12 @@ and do not establish a presumption of conformity.
 - Criteria with `check.type: resolve` request the product identifier
   themselves (with the Accept header the criterion names) and need
   `GET /api/v1/validate/<product identifier>`; with `POST` they are skipped.
+  `expect` checks status, content type and header fields (`exists`,
+  `equals`, `contains`, `matches`; field names case-insensitive, several
+  fields of one name combined with commas). `further_requests` are sent
+  afterwards with their own Accept header and evaluated independently. A
+  criterion fails if a check with severity error fails; if only checks with
+  `severity: warning` fail, the result is `warning`.
 - Criteria with `check.type: did` send the DIDs of the passport to
   [didlint](https://didlint.ownyourdata.eu) (DID Core, DID Resolution) and
   check linked verifiable presentations for the VC Data Model 2.0 context. The

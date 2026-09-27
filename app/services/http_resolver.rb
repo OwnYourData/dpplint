@@ -4,13 +4,15 @@ require "resolv"
 
 # Plain HTTP(S) GET like a phone scanning a data carrier: no credentials,
 # redirects followed, optional Accept header. Responses are cached per run.
+# Header fields of the final response are kept as a Hash of lower-case field
+# name => list of values (one entry per field line).
 #
 # Only public addresses are contacted: host names that resolve to loopback,
 # private, link-local or other internal ranges are refused (also after a
 # redirect), so that passports cannot make dpplint reach internal services.
 # DPPLINT_ALLOW_PRIVATE_NETWORKS=1 lifts this for local development.
 class HttpResolver
-  Response = Struct.new(:url, :status, :content_type, :body, :error, keyword_init: true) do
+  Response = Struct.new(:url, :status, :content_type, :body, :error, :headers, keyword_init: true) do
     def media_type = content_type.to_s.split(";").first.to_s.strip.downcase
     def success? = error.nil? && status.between?(200, 299)
   end
@@ -80,7 +82,7 @@ class HttpResolver
         next
       end
       body = mode == :get ? res.body : nil
-      return Response.new(url: uri.to_s, status: res.code.to_i, content_type: res["content-type"], body: body)
+      return Response.new(url: uri.to_s, status: res.code.to_i, content_type: res["content-type"], body: body, headers: res.to_hash)
     end
     Response.new(url: uri.to_s, error: "more than #{MAX_REDIRECTS} redirects")
   rescue URI::InvalidURIError
