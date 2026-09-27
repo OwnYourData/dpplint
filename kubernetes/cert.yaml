@@ -7,6 +7,6 @@ spec:
   issuerRef:
     group: cert-manager.io
     name: letsencrypt-prod
-    kind: Issuer
+    kind: ClusterIssuer
   dnsNames:
   - dpplint.ownyourdata.eu

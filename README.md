@@ -54,7 +54,7 @@ for linux/amd64, like the SOyA web-cli it contains.
 ## Deployment
 
 `kubernetes/` holds the manifests for dpplint.ownyourdata.eu: deployment,
-service, certificate (cert-manager, issuer `letsencrypt-prod`) and ingress
+service, certificate (cert-manager, ClusterIssuer `letsencrypt-prod`) and ingress
 (nginx).
 
 ## Tests
