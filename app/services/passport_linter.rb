@@ -5,7 +5,9 @@
 # belongs to a criterion when its message starts with "[<criterion ID>]".
 # Criteria with check.type resolve request the product identifier itself and
 # therefore need one (GET /api/v1/validate/<product identifier>). Criteria with
-# check.type did hand the DIDs of the passport to didlint.
+# check.type did hand the DIDs of the passport to didlint. Criteria with
+# check.type proof verify an integrity proof in the passport; criteria with
+# check.type links check the related resources it links to.
 class PassportLinter
   SH = "http://www.w3.org/ns/shacl#".freeze
 
@@ -45,15 +47,17 @@ class PassportLinter
     check = criterion["check"] || {}
 
     return resolve(base, check) if check["type"] == "resolve"
-    unless %w[shacl did].include?(check["type"])
+    unless %w[shacl did proof links].include?(check["type"])
       return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version")
     end
     return base.merge(result: "skipped", reason: "passport could not be retrieved") if passport.nil?
-    return did(base, check, passport) if check["type"] == "did"
-
     if criterion["applies_if"] && !AppliesIf.holds?(criterion["applies_if"], passport)
       return base.merge(result: "skipped", reason: "condition not met")
     end
+    return did(base, check, passport) if check["type"] == "did"
+    return proof(base, check, passport) if check["type"] == "proof"
+    return links(base, check, passport) if check["type"] == "links"
+
     return base.merge(result: "skipped", reason: "no shapes available for #{check['shapes_select']}") unless check["structure"]
 
     report = (reports[check["structure"]] ||= validate(check["structure"], passport))
@@ -80,6 +84,23 @@ class PassportLinter
     base.merge(result: result_for(messages), messages: messages)
   rescue Didlint::Unavailable => e
     base.merge(result: "skipped", reason: e.message)
+  end
+
+  def proof(base, check, passport)
+    outcome = ProofCheck.new(check, passport, didlint: @didlint).outcome
+    return base.merge(result: "skipped", reason: outcome.skipped) if outcome.skipped
+
+    base.merge(result: result_for(outcome.messages), messages: outcome.messages)
+  rescue Didlint::Unavailable => e
+    base.merge(result: "skipped", reason: e.message)
+  end
+
+  def links(base, check, passport)
+    links_check = LinksCheck.new(check, passport, resolver: @resolver)
+    return base.merge(result: "skipped", reason: "no #{check['element_type']} elements") if links_check.resources.empty?
+
+    messages = links_check.messages
+    base.merge(result: result_for(messages), messages: messages)
   end
 
   def result_for(messages)

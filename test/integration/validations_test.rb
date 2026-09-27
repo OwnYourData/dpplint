@@ -1,6 +1,7 @@
 require "test_helper"
 
 class ValidationsTest < ActionDispatch::IntegrationTest
+  include SigningHelper
   wait_for_web_cli
 
   def reference
@@ -52,6 +53,29 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     result = criterion(lint(reference), "DPP-ID-016")
     assert_equal "skipped", result["result"]
     assert_match(/didlint not reachable/, result["reason"])
+  end
+
+  test "passport without proof or related resources skips both checks" do
+    result = lint(reference)
+    assert_match(/carries no integrity proof/, criterion(result, "DPP-SEC-002")["reason"])
+    assert_equal "no RelatedResource elements", criterion(result, "DPP-DAT-011")["reason"]
+  end
+
+  test "passport signed by its economic operator passes the integrity check" do
+    passport = reference.merge("economicOperatorId" => did_key)
+    signed = sign(passport, verification_method: "#{did_key}##{key_multibase}")
+    assert_equal "passed", criterion(lint(signed), "DPP-SEC-002")["result"]
+    changed = signed.merge("dppStatus" => "Inactive")
+    assert_equal "failed", criterion(lint(changed), "DPP-SEC-002")["result"]
+  end
+
+  test "related resource without content type fails" do
+    passport = reference.deep_dup
+    passport["elements"] << { "elementId" => "userManual", "objectType" => "RelatedResource", "url" => "manual.pdf" }
+    result = criterion(lint(passport), "DPP-DAT-011")
+    assert_equal "failed", result["result"]
+    assert_equal ["userManual: contentType is missing", "userManual: url manual.pdf is not an absolute HTTP(S) URL"],
+                 result["messages"].map { |m| m["message"] }
   end
 
   test "invalid JSON is rejected" do

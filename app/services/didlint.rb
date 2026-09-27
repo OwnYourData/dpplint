@@ -15,10 +15,15 @@ class Didlint
 
   # The DID document, or nil if the DID cannot be resolved.
   def resolve(did)
-    doc = get("api/resolve/#{did}")
-    doc.is_a?(Hash) && doc["id"] ? doc : nil
+    resolve!(did)
   rescue Unavailable
     nil
+  end
+
+  # Like resolve, but raises Unavailable if didlint cannot be reached.
+  def resolve!(did)
+    doc = get("api/resolve/#{did}")
+    doc.is_a?(Hash) && doc["id"] ? doc : nil
   end
 
   private

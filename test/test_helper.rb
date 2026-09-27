@@ -3,6 +3,7 @@ ENV["RAILS_ENV"] ||= "test"
 ENV["DIDLINT_URL"] ||= "http://127.0.0.1:9"
 require_relative "../config/environment"
 require "rails/test_help"
+require_relative "support_signing"
 
 module ActiveSupport
   class TestCase

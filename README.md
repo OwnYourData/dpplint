@@ -30,8 +30,18 @@ and do not establish a presumption of conformity.
   didlint instance is set with `DIDLINT_URL` (default
   `https://didlint.ownyourdata.eu`); it is the only service dpplint calls
   besides the passport and the resources it links.
-- Check types not implemented yet (`proof`, `links`) and criteria whose
-  condition does not hold are reported as `skipped`.
+- Criteria with `check.type: proof` verify an integrity proof in the passport
+  against a key of the economic operator: W3C Data Integrity proofs
+  (`DataIntegrityProof`, cryptosuite `eddsa-jcs-2022`), with the key taken from
+  a `did:key` or from the DID document resolved by didlint. Passports without a
+  proof, and other proof formats, are reported as `skipped`.
+- Criteria with `check.type: links` check every `RelatedResource` of the
+  passport for the required attributes and send a HEAD request to its URL
+  (at most 20 URLs per passport). A URL that does not answer gives a warning.
+- Criteria whose condition does not hold are reported as `skipped`.
+- dpplint only contacts public addresses: URLs whose host resolves to loopback,
+  private or link-local ranges are not retrieved.
+  `DPPLINT_ALLOW_PRIVATE_NETWORKS=1` lifts this for local development.
 - API documentation: `/api-docs`.
 
 The image contains everything it needs at run time: the Rails API, the SOyA
