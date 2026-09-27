@@ -45,7 +45,8 @@
     <input type="url" id="productId" name="productId" required placeholder="https://… (product identifier from the data carrier)" value="<%= @product_id %>">
     <button type="submit" id="run">Check</button>
   </form>
-  <p class="hint">Example: <a id="example">https://dpp.oydapp.eu/01/09520123456788/21/000001</a></p>
+  <p class="hint">Examples: <a class="example">https://dpp.oydapp.eu/01/09520123456788/21/000002</a> (with content integrity),
+    <a class="example">https://dpp.oydapp.eu/01/09520123456788/21/000001</a></p>
 
   <div id="status"></div>
   <div id="result"></div>
@@ -102,7 +103,7 @@
   };
 
   form.addEventListener("submit", (e) => { e.preventDefault(); run(input.value.trim()); });
-  document.getElementById("example").addEventListener("click", (e) => { input.value = e.target.textContent; run(input.value); });
+  document.querySelectorAll(".example").forEach((a) => a.addEventListener("click", (e) => { input.value = e.target.textContent; run(input.value); }));
   if (input.value) run(input.value);
 </script>
 </body>

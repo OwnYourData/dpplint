@@ -41,8 +41,17 @@ and do not establish a presumption of conformity.
     `Accept: application/vc+jwt, application/jwt, application/jose`; a JWS
     delivered that way has to carry the same passport as the JSON answer.
 
-  Keys are taken from a `did:key` or from the DID document resolved by
-  didlint (Ed25519 or P-256, as `publicKeyMultibase` or `publicKeyJwk`).
+  - the passport DID (`digitalProductPassportId`, `did:oyd`): its DID
+    document, resolved by didlint in the current version, carries in the
+    service of type `DigitalProductPassport` a `payloadHash` (SHA-256
+    multihash, base58btc) of the passport bytes delivered by that service's
+    `serviceEndpoint`. dpplint compares it with the bytes from the
+    `serviceEndpoint` and with the bytes delivered for the product identifier
+    (with `POST`: with the content sent).
+
+  Keys for Data Integrity and JWS are taken from a `did:key` or from the DID
+  document resolved by didlint (Ed25519 or P-256, as `publicKeyMultibase` or
+  `publicKeyJwk`).
   Passports without a proof, and other proof formats, are reported as
   `skipped`.
 - Criteria with `check.type: links` check every `RelatedResource` of the

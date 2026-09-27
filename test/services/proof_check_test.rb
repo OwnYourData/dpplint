@@ -9,19 +9,31 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   # Returns a fixed DID document instead of asking didlint.
   class FakeDidlint
-    def initialize(doc = nil, unavailable: false) = (@doc, @unavailable = doc, unavailable)
+    def initialize(doc = nil, unavailable: false, docs: {}) = (@doc, @unavailable, @docs = doc, unavailable, docs)
 
-    def resolve!(_did)
+    def resolve!(did)
       raise Didlint::Unavailable, "didlint not reachable (test)" if @unavailable
 
-      @doc
+      @docs.fetch(did, @doc)
+    end
+  end
+
+  # Answers GET requests from a table of URL => body instead of the network.
+  class FakeResolver
+    def initialize(bodies) = @bodies = bodies
+
+    def get(url, accept: nil)
+      body = @bodies[url]
+      return HttpResolver::Response.new(url: url, status: 404, content_type: "text/plain", body: "") unless body
+
+      HttpResolver::Response.new(url: url, status: 200, content_type: "application/json", body: body)
     end
   end
 
   def passport(operator = did_key) = { "uniqueProductIdentifier" => "https://dpp.example.org/01/1", "economicOperatorId" => operator, "dppStatus" => "Active" }
 
-  def outcome(passport, didlint: FakeDidlint.new, jws: nil, jws_only: false)
-    ProofCheck.new(CHECK, passport, jws: jws, jws_only: jws_only, didlint: didlint).outcome
+  def outcome(passport, didlint: FakeDidlint.new, jws: nil, jws_only: false, raw: nil, resolver: FakeResolver.new({}))
+    ProofCheck.new(CHECK, passport, raw: raw, jws: jws, jws_only: jws_only, didlint: didlint, resolver: resolver).outcome
   end
 
   def oyd_document(key = signing_key)
@@ -41,7 +53,7 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "passport without proof is skipped" do
     result = outcome(passport)
     assert_match(/carries no integrity proof/, result.skipped)
-    assert_match(/did-oyd-log not checked/, result.skipped)
+    assert_match(/no payloadHash for the passport DID/, result.skipped)
   end
 
   test "proof by a did:key of the economic operator passes" do
@@ -134,5 +146,69 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "JWS with an unsupported algorithm is skipped" do
     jws = Jws.parse("#{b64url({ 'alg' => 'RS256', 'kid' => 'x' }.to_json)}.#{b64url(passport.to_json)}.AAAA")
     assert_match(/JWS RS256 is not verified/, outcome(jws.payload, jws: jws, jws_only: true).skipped)
+  end
+
+  PASSPORT_DID = "did:oyd:zQmPassport".freeze
+  ENDPOINT = "https://custodian.example.org/dpp/v1/dppsByProductId/1".freeze
+
+  def attested_passport = passport("did:oyd:zQmOperator").merge("digitalProductPassportId" => PASSPORT_DID)
+  def attested_bytes = JSON.generate(attested_passport)
+
+  def passport_did_document(payload_hash: ProofCheck.multihash(attested_bytes))
+    service = { "id" => "#{PASSPORT_DID}#payload", "type" => "DigitalProductPassport", "serviceEndpoint" => ENDPOINT }
+    service["payloadHash"] = payload_hash if payload_hash
+    { "id" => PASSPORT_DID, "service" => [service] }
+  end
+
+  def oyd_outcome(raw:, passport: attested_passport, document: passport_did_document, endpoint_body: attested_bytes)
+    outcome(passport, raw: raw, didlint: FakeDidlint.new(docs: { PASSPORT_DID => document }),
+                      resolver: FakeResolver.new(ENDPOINT => endpoint_body))
+  end
+
+  # Bytes of https://dpp.oydapp.eu/01/09520123456788/21/000002 as delivered on 27.09.2026,
+  # and the payloadHash in the DID document of its digitalProductPassportId.
+  test "multihash matches the payloadHash of the example passport 000002" do
+    assert_equal "zQmRdgMsgR8RRaQEadHFSJ2Zw4cReM6MpeZWJJTEjRzbSfw", ProofCheck.multihash(file_fixture("passport-000002.json").binread)
+  end
+
+  test "passport whose bytes match the payloadHash of its DID passes" do
+    assert_empty oyd_outcome(raw: attested_bytes).messages
+  end
+
+  test "passport at the serviceEndpoint that does not match the payloadHash fails" do
+    result = oyd_outcome(raw: attested_bytes, document: passport_did_document(payload_hash: ProofCheck.multihash("{}")))
+    assert_match(/does not match payloadHash/, result.messages.first[:message])
+  end
+
+  test "product identifier delivering other content than attested fails" do
+    changed = attested_passport.merge("dppStatus" => "Inactive")
+    result = oyd_outcome(raw: JSON.generate(changed), passport: changed)
+    assert_match(/differs from the passport attested/, result.messages.first[:message])
+  end
+
+  test "same content in other bytes gives a warning" do
+    result = oyd_outcome(raw: JSON.pretty_generate(attested_passport))
+    assert_equal ["warning"], result.messages.map { |m| m[:severity] }
+  end
+
+  test "posted passport is compared by content" do
+    assert_empty oyd_outcome(raw: nil).messages
+    changed = attested_passport.merge("dppStatus" => "Inactive")
+    assert_match(/sent for checking differs/, oyd_outcome(raw: nil, passport: changed).messages.first[:message])
+  end
+
+  test "DID document without payloadHash is skipped" do
+    result = oyd_outcome(raw: attested_bytes, document: passport_did_document(payload_hash: nil))
+    assert_match(/binds only the location of the passport, not its content/, result.skipped)
+  end
+
+  test "unreachable serviceEndpoint still passes when the delivered bytes match" do
+    assert_empty oyd_outcome(raw: attested_bytes, endpoint_body: nil).messages
+    assert_match(/cannot be retrieved/, oyd_outcome(raw: nil, endpoint_body: nil).messages.first[:message])
+  end
+
+  test "did-oyd-log without didlint is skipped" do
+    result = outcome(attested_passport, raw: attested_bytes, didlint: FakeDidlint.new(unavailable: true))
+    assert_match(/did-oyd-log not checked \(didlint not reachable/, result.skipped)
   end
 end

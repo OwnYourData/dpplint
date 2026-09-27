@@ -9,45 +9,59 @@ require "openssl"
 #   cryptosuite eddsa-jcs-2022;
 # - vc-jose-cose: the passport as compact JWS (application/vc+jwt), signed
 #   with EdDSA or ES256, whose header kid names the key. If the passport was
-#   also delivered as plain JSON, the JWS payload has to be the same passport.
+#   also delivered as plain JSON, the JWS payload has to be the same passport;
+# - did-oyd-log: the DID document of digitalProductPassportId (did:oyd,
+#   resolved by didlint, current version) carries in its service of type
+#   DigitalProductPassport a payloadHash: SHA-256 multihash (base58btc) of the
+#   passport bytes as delivered by that service's serviceEndpoint. The bytes
+#   delivered for the product identifier have to be the same.
 # Passports without a proof, and proofs in formats this version does not
-# verify, are skipped. Keys come from did:key directly or from the DID
-# document resolved by didlint.
+# verify, are skipped. Keys for Data Integrity and JWS come from did:key
+# directly or from the DID document resolved by didlint.
 class ProofCheck
   Outcome = Struct.new(:skipped, :messages, keyword_init: true)
 
   CRYPTOSUITES = %w[eddsa-jcs-2022].freeze
-  CHECKED_FORMATS = %w[vc-data-integrity vc-jose-cose].freeze
+  PASSPORT_SERVICE = "DigitalProductPassport".freeze
 
-  # passport: the passport as JSON; jws: a Jws of the passport, if one was delivered;
+  # passport: the passport as JSON; raw: its bytes as delivered for the product
+  # identifier (nil for POST); jws: a Jws of the passport, if one was delivered;
   # jws_only: true if the passport is the JWS payload (nothing to compare it with).
-  def initialize(check, passport, jws: nil, jws_only: false, didlint: Didlint.new)
+  def initialize(check, passport, raw: nil, jws: nil, jws_only: false, didlint: Didlint.new, resolver: HttpResolver.new)
     @check = check
     @passport = passport
+    @raw = raw
     @jws = jws
     @jws_only = jws_only
+    @didlint = didlint
+    @resolver = resolver
     @keys = KeyResolver.new(didlint)
   end
 
   def outcome
-    return skip(no_proof_reason) unless @passport.key?("proof") || @jws
-
-    operator = @passport[@check["key_from"].to_s.delete_prefix("$.")]
-    return skip("#{@check['key_from']} is not a DID, so the key of the economic operator cannot be determined") unless did?(operator)
-
     @messages = []
     @verified = 0
     @unsupported = []
-    data_integrity(operator) if @passport.key?("proof")
-    jose(operator) if @jws
+    @notes = []
 
-    if @messages.empty? && @verified.zero?
-      return skip("proof format #{@unsupported.uniq.join(', ')} is not verified in this version " \
-                  "(supported: DataIntegrityProof #{CRYPTOSUITES.join(', ')}; JWS #{Jws::ALGORITHMS.join(', ')})")
+    if @passport.key?("proof") || @jws
+      operator = @passport[@check["key_from"].to_s.delete_prefix("$.")]
+      if did?(operator)
+        data_integrity(operator) if @passport.key?("proof")
+        jose(operator) if @jws
+      else
+        @notes << "#{@check['key_from']} is not a DID, so the key of the economic operator cannot be determined"
+      end
     end
+    oyd_log if Array(@check["formats"]).include?("did-oyd-log")
 
-    Outcome.new(messages: @messages)
+    return Outcome.new(messages: @messages) unless @messages.empty? && @verified.zero?
+
+    skip(skip_reason)
   end
+
+  # SHA-256 multihash, base58btc with prefix z (zQm...).
+  def self.multihash(bytes) = "z#{Base58.encode("\x12\x20".b + Digest::SHA256.digest(bytes.to_s.b))}"
 
   # eddsa-jcs-2022: SHA-256 of the canonical proof options, followed by
   # SHA-256 of the canonical document without its proof, signed with Ed25519.
@@ -67,10 +81,61 @@ class ProofCheck
 
   private
 
-  def no_proof_reason
-    others = Array(@check["formats"]) - CHECKED_FORMATS
-    reason = "passport carries no integrity proof (neither a Data Integrity proof nor a JWS)"
-    others.any? ? "#{reason}; #{others.join(', ')} not checked in this version" : reason
+  def skip_reason
+    reasons = []
+    unless @passport.key?("proof") || @jws || @notes.any? { |n| n.start_with?("the DID document") }
+      reasons << "passport carries no integrity proof (no Data Integrity proof, no JWS, no payloadHash for the passport DID)"
+    end
+    if @unsupported.any?
+      reasons << "proof format #{@unsupported.uniq.join(', ')} is not verified in this version " \
+                 "(supported: DataIntegrityProof #{CRYPTOSUITES.join(', ')}; JWS #{Jws::ALGORITHMS.join(', ')}; did-oyd-log)"
+    end
+    (reasons + @notes).join("; ")
+  end
+
+  def oyd_log
+    did = @passport["digitalProductPassportId"]
+    return unless did.is_a?(String) && did.start_with?("did:oyd:")
+
+    doc = @didlint.resolve!(did)
+    return @notes << "#{did} cannot be resolved, so did-oyd-log is not checked" unless doc
+
+    service = Array(doc["service"]).find { |s| s.is_a?(Hash) && Array(s["type"]).include?(PASSPORT_SERVICE) }
+    expected = service && service["payloadHash"]
+    unless expected.is_a?(String)
+      return @notes << "the DID document of #{did} binds only the location of the passport, not its content (no payloadHash)"
+    end
+
+    record(compare_payload(expected, service["serviceEndpoint"]))
+  rescue Didlint::Unavailable => e
+    @notes << "did-oyd-log not checked (#{e.message})"
+  end
+
+  def compare_payload(expected, endpoint)
+    attested = endpoint.is_a?(String) ? @resolver.get(endpoint) : nil
+    unless attested&.success?
+      problem = attested ? (attested.error || "HTTP #{attested.status}") : "no serviceEndpoint"
+      return [] if @raw && self.class.multihash(@raw) == expected
+
+      return [violation("attested passport at the serviceEndpoint cannot be retrieved (#{problem}), so payloadHash #{expected} cannot be compared")]
+    end
+
+    actual = self.class.multihash(attested.body)
+    return [violation("passport at the serviceEndpoint #{endpoint} does not match payloadHash #{expected} of the passport DID (SHA-256 is #{actual})")] if actual != expected
+    return (same_content?(attested.body) ? [] : [violation("passport sent for checking differs from the passport attested by payloadHash #{expected}")]) unless @raw
+    return [] if self.class.multihash(@raw) == expected
+
+    if same_content?(attested.body)
+      [warning("passport delivered for the product identifier has the attested content but not the attested bytes, so payloadHash cannot be checked on it directly")]
+    else
+      [violation("passport delivered for the product identifier differs from the passport attested by payloadHash #{expected}")]
+    end
+  end
+
+  def same_content?(body)
+    JSON.parse(body) == @passport
+  rescue JSON::ParserError
+    false
   end
 
   def data_integrity(operator)

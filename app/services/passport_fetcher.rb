@@ -3,9 +3,10 @@
 # The passport is requested with Accept: application/json. If the answer is a
 # compact JWS, its payload is the passport. Otherwise the identifier is also
 # requested with the JOSE media types of VC-JOSE-COSE; a JWS delivered that
-# way is kept for the integrity check (DPP-SEC-002).
+# way is kept for the integrity check (DPP-SEC-002), as are the bytes of the
+# JSON answer (compared with the payloadHash of the passport DID).
 class PassportFetcher
-  Result = Struct.new(:json, :info, :jws, :jws_only, keyword_init: true)
+  Result = Struct.new(:json, :info, :jws, :jws_only, :raw, keyword_init: true)
 
   def initialize(resolver = HttpResolver.new)
     @resolver = resolver
@@ -27,7 +28,7 @@ class PassportFetcher
     return Result.new(info: info.merge(error: "response is not a JSON object")) unless json.is_a?(Hash)
 
     jws = secured(product_id)
-    Result.new(json: json, jws: jws, jws_only: false, info: jws ? info.merge(securedAs: "json and jws") : info)
+    Result.new(json: json, raw: res.body.to_s.b, jws: jws, jws_only: false, info: jws ? info.merge(securedAs: "json and jws") : info)
   rescue JSON::ParserError
     Result.new(info: info.merge(error: "response is not JSON"))
   end

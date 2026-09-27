@@ -9,7 +9,7 @@ module Api
         resolver = HttpResolver.new
         fetch = PassportFetcher.new(resolver).fetch(product_id)
         render json: PassportLinter.new(resolver: resolver)
-          .run(passport: fetch.json, product_id: product_id, retrieval: fetch.info, jws: fetch.jws, jws_only: fetch.jws_only)
+          .run(passport: fetch.json, product_id: product_id, retrieval: fetch.info, jws: fetch.jws, jws_only: fetch.jws_only, raw: fetch.raw)
       end
 
       # POST /api/v1/validate with a passport as JSON body, or as compact JWS

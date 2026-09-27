@@ -18,8 +18,9 @@ class PassportLinter
     @didlint = didlint
   end
 
-  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false)
+  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false, raw: nil)
     @product_id = product_id
+    @raw = raw
     @jws = jws
     @jws_only = jws_only
     reports = {}
@@ -89,7 +90,7 @@ class PassportLinter
   end
 
   def proof(base, check, passport)
-    outcome = ProofCheck.new(check, passport, jws: @jws, jws_only: @jws_only, didlint: @didlint).outcome
+    outcome = ProofCheck.new(check, passport, raw: @raw, jws: @jws, jws_only: @jws_only, didlint: @didlint, resolver: @resolver).outcome
     return base.merge(result: "skipped", reason: outcome.skipped) if outcome.skipped
 
     base.merge(result: result_for(outcome.messages), messages: outcome.messages)
