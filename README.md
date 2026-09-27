@@ -15,7 +15,9 @@ and do not establish a presumption of conformity.
   the check directly and can be linked.
 - `GET /api/v1/validate/<product identifier>` retrieves the passport like a
   phone scanning a data carrier (plain HTTPS GET, no credentials) and checks it.
-- `POST /api/v1/validate` checks a passport sent as JSON.
+- `POST /api/v1/validate` checks a passport sent as JSON, or as compact JWS
+  with `Content-Type: application/vc+jwt` (also `application/jwt`,
+  `application/jose`).
 - Criteria with `check.type: shacl` are validated with
   [SOyA](https://github.com/OwnYourData/soya): the passport goes through the
   SOyA web-cli endpoints `acquire` and `validate` for the structure named in
@@ -30,11 +32,19 @@ and do not establish a presumption of conformity.
   didlint instance is set with `DIDLINT_URL` (default
   `https://didlint.ownyourdata.eu`); it is the only service dpplint calls
   besides the passport and the resources it links.
-- Criteria with `check.type: proof` verify an integrity proof in the passport
-  against a key of the economic operator: W3C Data Integrity proofs
-  (`DataIntegrityProof`, cryptosuite `eddsa-jcs-2022`), with the key taken from
-  a `did:key` or from the DID document resolved by didlint. Passports without a
-  proof, and other proof formats, are reported as `skipped`.
+- Criteria with `check.type: proof` verify integrity proofs of the passport
+  against a key of the economic operator:
+  - W3C Data Integrity proofs in the passport (`DataIntegrityProof`,
+    cryptosuite `eddsa-jcs-2022`);
+  - the passport as compact JWS (VC-JOSE-COSE, `EdDSA` or `ES256`, key named
+    by `kid`). With `GET`, dpplint also requests the identifier with
+    `Accept: application/vc+jwt, application/jwt, application/jose`; a JWS
+    delivered that way has to carry the same passport as the JSON answer.
+
+  Keys are taken from a `did:key` or from the DID document resolved by
+  didlint (Ed25519 or P-256, as `publicKeyMultibase` or `publicKeyJwk`).
+  Passports without a proof, and other proof formats, are reported as
+  `skipped`.
 - Criteria with `check.type: links` check every `RelatedResource` of the
   passport for the required attributes and send a HEAD request to its URL
   (at most 20 URLs per passport). A URL that does not answer gives a warning.

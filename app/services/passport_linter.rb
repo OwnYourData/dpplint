@@ -18,8 +18,10 @@ class PassportLinter
     @didlint = didlint
   end
 
-  def run(passport:, product_id: nil, retrieval: nil)
+  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false)
     @product_id = product_id
+    @jws = jws
+    @jws_only = jws_only
     reports = {}
     criteria = @catalogue.passport_criteria.map { |c| evaluate(c, passport, reports) }
     counted = criteria.select { |c| %w[passed warning failed].include?(c[:result]) }
@@ -87,7 +89,7 @@ class PassportLinter
   end
 
   def proof(base, check, passport)
-    outcome = ProofCheck.new(check, passport, didlint: @didlint).outcome
+    outcome = ProofCheck.new(check, passport, jws: @jws, jws_only: @jws_only, didlint: @didlint).outcome
     return base.merge(result: "skipped", reason: outcome.skipped) if outcome.skipped
 
     base.merge(result: result_for(outcome.messages), messages: outcome.messages)

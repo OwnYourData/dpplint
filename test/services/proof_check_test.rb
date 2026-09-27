@@ -20,7 +20,9 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   def passport(operator = did_key) = { "uniqueProductIdentifier" => "https://dpp.example.org/01/1", "economicOperatorId" => operator, "dppStatus" => "Active" }
 
-  def outcome(passport, didlint: FakeDidlint.new) = ProofCheck.new(CHECK, passport, didlint: didlint).outcome
+  def outcome(passport, didlint: FakeDidlint.new, jws: nil, jws_only: false)
+    ProofCheck.new(CHECK, passport, jws: jws, jws_only: jws_only, didlint: didlint).outcome
+  end
 
   def oyd_document(key = signing_key)
     { "id" => OYD, "verificationMethod" => [
@@ -30,7 +32,7 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   test "W3C test vector for eddsa-jcs-2022 verifies" do
     signed = JSON.parse(file_fixture("w3c/eddsa-jcs-2022-signed.json").read)
-    key = ProofCheck.ed25519_key(JSON.parse(file_fixture("w3c/public-key.json").read)["publicKeyMultibase"])
+    key = KeyResolver.from_multibase(JSON.parse(file_fixture("w3c/public-key.json").read)["publicKeyMultibase"])
     signature = Base58.decode(signed["proof"]["proofValue"].delete_prefix("z"))
     assert ProofCheck.eddsa_jcs_valid?(signed, signed["proof"], key, signature)
     refute ProofCheck.eddsa_jcs_valid?(signed.merge("name" => "changed"), signed["proof"], key, signature)
@@ -39,7 +41,7 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "passport without proof is skipped" do
     result = outcome(passport)
     assert_match(/carries no integrity proof/, result.skipped)
-    assert_match(/vc-jose-cose, did-oyd-log/, result.skipped)
+    assert_match(/did-oyd-log not checked/, result.skipped)
   end
 
   test "proof by a did:key of the economic operator passes" do
@@ -74,7 +76,7 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   test "verification method missing from the DID document fails" do
     signed = sign(passport(OYD), verification_method: "#{OYD}#key-other")
-    assert_match(/is not an Ed25519 key/, outcome(signed, didlint: FakeDidlint.new(oyd_document)).messages.first[:message])
+    assert_match(/is not an Ed25519 or P-256 key/, outcome(signed, didlint: FakeDidlint.new(oyd_document)).messages.first[:message])
   end
 
   test "other proof purpose gives a warning" do
@@ -96,5 +98,41 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "unreachable didlint is passed on" do
     signed = sign(passport(OYD), verification_method: "#{OYD}#key-doc")
     assert_raises(Didlint::Unavailable) { outcome(signed, didlint: FakeDidlint.new(unavailable: true)) }
+  end
+
+  test "passport delivered as JWS signed by the economic operator passes" do
+    jws = Jws.parse(sign_jws(passport, kid: "#{did_key}##{key_multibase}"))
+    assert_empty outcome(jws.payload, jws: jws, jws_only: true).messages
+  end
+
+  test "JWS signed with ES256 and a key from the DID document passes" do
+    ec = OpenSSL::PKey::EC.generate("prime256v1")
+    doc = { "id" => OYD, "verificationMethod" => [{ "id" => "#key-p256", "type" => "Multikey", "publicKeyMultibase" => key_multibase(ec) }] }
+    jws = Jws.parse(sign_jws(passport(OYD), kid: "#key-p256", key: ec))
+    assert_empty outcome(jws.payload, jws: jws, jws_only: true, didlint: FakeDidlint.new(doc)).messages
+  end
+
+  test "JWS with changed payload fails" do
+    header, _payload, signature = sign_jws(passport, kid: "#{did_key}##{key_multibase}").split(".")
+    jws = Jws.parse([header, b64url(passport.merge("dppStatus" => "Inactive").to_json), signature].join("."))
+    assert_match(/does not verify/, outcome(jws.payload, jws: jws, jws_only: true).messages.first[:message])
+  end
+
+  test "JWS whose payload differs from the JSON passport fails" do
+    jws = Jws.parse(sign_jws(passport, kid: "#{did_key}##{key_multibase}"))
+    result = outcome(passport.merge("dppStatus" => "Inactive"), jws: jws)
+    assert_equal ["JWS payload differs from the passport delivered as JSON"], result.messages.map { |m| m[:message] }
+  end
+
+  test "JWS without kid fails" do
+    header = b64url({ "alg" => "EdDSA" }.to_json)
+    body = b64url(passport.to_json)
+    jws = Jws.parse("#{header}.#{body}.#{b64url(signing_key.sign(nil, "#{header}.#{body}"))}")
+    assert_match(/no kid/, outcome(jws.payload, jws: jws, jws_only: true).messages.first[:message])
+  end
+
+  test "JWS with an unsupported algorithm is skipped" do
+    jws = Jws.parse("#{b64url({ 'alg' => 'RS256', 'kid' => 'x' }.to_json)}.#{b64url(passport.to_json)}.AAAA")
+    assert_match(/JWS RS256 is not verified/, outcome(jws.payload, jws: jws, jws_only: true).skipped)
   end
 end

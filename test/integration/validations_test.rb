@@ -69,6 +69,21 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", criterion(lint(changed), "DPP-SEC-002")["result"]
   end
 
+  test "passport posted as JWS is checked and its signature verified" do
+    passport = reference.merge("economicOperatorId" => did_key)
+    jws = sign_jws(passport, kid: "#{did_key}##{key_multibase}")
+    post "/api/v1/validate", params: jws, headers: { "Content-Type" => "application/vc+jwt" }
+    assert_response :success
+    result = JSON.parse(response.body)
+    assert_equal "passed", criterion(result, "DPP-SEC-002")["result"]
+    assert_equal "passed", criterion(result, "DPP-DAT-014")["result"]
+  end
+
+  test "body that is not a JWS is rejected" do
+    post "/api/v1/validate", params: "{}", headers: { "Content-Type" => "application/vc+jwt" }
+    assert_response :unprocessable_entity
+  end
+
   test "related resource without content type fails" do
     passport = reference.deep_dup
     passport["elements"] << { "elementId" => "userManual", "objectType" => "RelatedResource", "url" => "manual.pdf" }
