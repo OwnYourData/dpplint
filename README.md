@@ -84,7 +84,8 @@ curl -s http://localhost:3000/api/v1/validate/https://dpp.oydapp.eu/01/095201234
 ```
 
 `./build.sh <ref>` builds with a given commit or tag of dpp-criteria; the
-default is `main`. `GET /version` shows the commit in use. The image is built
+default is `main`. Branch and tag names are resolved to their commit first, so
+that the Docker build cache never reuses an older dpp-criteria. `GET /version` shows the commit in use. The image is built
 for linux/amd64, like the SOyA web-cli it contains.
 
 ## Deployment
