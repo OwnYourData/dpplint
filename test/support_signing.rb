@@ -22,9 +22,10 @@ module SigningHelper
 
   def b64url(bytes) = Base64.urlsafe_encode64(bytes, padding: false)
 
-  def sign_jws(passport, kid:, key: signing_key)
+  def sign_jws(passport, kid:, key: signing_key, iss: nil)
     alg = key.is_a?(OpenSSL::PKey::EC) ? "ES256" : "EdDSA"
-    input = "#{b64url({ 'alg' => alg, 'kid' => kid, 'typ' => 'vc+jwt' }.to_json)}.#{b64url(passport.to_json)}"
+    header = { "alg" => alg, "kid" => kid, "typ" => "vc+jwt", "iss" => iss }.compact
+    input = "#{b64url(header.to_json)}.#{b64url(passport.to_json)}"
     signature = if alg == "ES256"
                   OpenSSL::ASN1.decode(key.sign("SHA256", input)).value.map { |i| i.value.to_s(2).rjust(32, "\x00".b) }.join
                 else
