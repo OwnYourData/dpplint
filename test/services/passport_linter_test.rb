@@ -72,6 +72,25 @@ class PassportLinterTest < ActiveSupport::TestCase
     assert_equal "expect json is not evaluated for check type resolve in this version", result[:reason]
   end
 
+  test "applies_if with a matches pattern that is not valid ECMA-262 skips the criterion with a reason" do
+    criterion = { "id" => "DPP-ID-099", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
+                  "applies_if" => [{ "path" => "$.granularity", "matches" => "a**" }], "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
+    report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
+                           .run(passport: { "granularity" => "item" })
+    result = report[:criteria].first
+    assert_equal "skipped", result[:result]
+    assert_match(/\Aregular expression "a\*\*" in applies_if is not a valid ECMA-262 regular expression/, result[:reason])
+  end
+
+  test "applies_if with search() whose condition does not hold skips the criterion" do
+    criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
+                  "applies_if" => [{ "path" => "$.contentSpecificationIds[?search(@, '[Bb]atter')]", "exists" => true }],
+                  "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
+    report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
+                           .run(passport: { "contentSpecificationIds" => ["BATTERY"] })
+    assert_equal({ result: "skipped", reason: "condition not met" }, report[:criteria].first.slice(:result, :reason))
+  end
+
   test "a pattern that is not valid ECMA-262 skips the criterion with a reason, without a request" do
     check = CHECK.merge("expect" => CHECK["expect"].merge("headers" => [{ "name" => "Vary", "matches" => "(?i)accept" }]))
     result = lint({}, check)[:criteria].first

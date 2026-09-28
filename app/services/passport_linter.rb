@@ -54,6 +54,9 @@ class PassportLinter
       return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version")
     end
     return base.merge(result: "skipped", reason: "passport could not be retrieved") if passport.nil?
+    if (problem = AppliesIf.problem(criterion["applies_if"]))
+      return base.merge(result: "skipped", reason: problem)
+    end
     if criterion["applies_if"] && !AppliesIf.holds?(criterion["applies_if"], passport)
       return base.merge(result: "skipped", reason: "condition not met")
     end

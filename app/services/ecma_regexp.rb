@@ -1,5 +1,6 @@
 # Regular expressions as CRITERIA-FORMAT.md of dpp-criteria defines them for
-# `matches` ("Regular expressions"): ECMA-262 syntax without flags, searched
+# `matches` in JSON and header assertions, including applies_if ("Regular
+# expressions"): ECMA-262 syntax without flags, searched
 # anywhere in the value (no implicit anchoring), case-sensitive.
 #
 # Ruby's own Regexp differs from ECMA-262 in ways that change results, above
@@ -14,10 +15,11 @@
 # Patterns that are not valid ECMA-262 raise Invalid. Valid patterns that use
 # features outside the portable subset of CRITERIA-FORMAT.md, which dpplint
 # does not evaluate (lookaround, named groups, backreferences, legacy octal
-# escapes, \k, lone surrogates), raise Unsupported. Known remaining deviation:
-# characters outside the Basic Multilingual Plane are one character here, two
-# UTF-16 code units in ECMA-262 (relevant only for `.`, classes and
-# quantifiers applied to such a character).
+# escapes, \k, lone surrogates), raise Unsupported. Characters outside the
+# Basic Multilingual Plane count as one character here, as two UTF-16 code
+# units in ECMA-262; CRITERIA-FORMAT.md leaves results that depend on this
+# undefined. Regular expressions inside JSONPath (match(), search()) are
+# I-Regexp, see IRegexp.
 class EcmaRegexp
   class Error < StandardError; end
   class Invalid < Error; end

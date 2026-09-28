@@ -3,8 +3,10 @@
 # The first request follows the identifier with the Accept header of the
 # criterion (`accept`). Without `expect`, it has to resolve to a single
 # passport object whose uniqueProductIdentifier equals the identifier. With
-# `expect`, its status and content type are checked instead; an expected JSON
-# content type also requires the body to be a JSON object. Following "Order of
+# `expect`, its status and content type are checked instead. The content type
+# is compared as media type without parameters, case-insensitively; for a JSON
+# media type (application/json or +json) the body must also be a single JSON
+# object, which belongs to the content type check. Following "Order of
 # evaluation within a request" in CRITERIA-FORMAT.md, the header fields
 # (`headers`, see HeaderAssertion) are evaluated only if status and content
 # type hold; otherwise they give no message of their own.
@@ -73,13 +75,30 @@ class ResolveCheck
       out << violation("HTTP status is #{res.status}, expected #{expect['status'].join(' or ')}")
     end
     if (type = expect["content_type"])
-      if res.media_type != type.downcase
+      expected_type = media_type(type)
+      if res.media_type != expected_type
         out << violation("Content-Type is #{res.content_type.presence || 'missing'}, expected #{type}")
-      elsif type.downcase == "application/json" && !json_object?(res.body)
-        out << violation("response is not a single JSON object")
+      elsif json_media_type?(expected_type)
+        json = parse_json(res.body)
+        if json == :invalid then out << violation("response is not valid JSON")
+        elsif !json.is_a?(Hash) then out << violation("response is not a single JSON object")
+        end
       end
     end
     out
+  end
+
+  # The media type without parameters, lower case (CRITERIA-FORMAT.md, "Order
+  # of evaluation within a request").
+  def media_type(value) = value.to_s.split(";").first.to_s.strip.downcase
+
+  # application/json or a type with the structured syntax suffix +json.
+  def json_media_type?(type) = type == "application/json" || type.end_with?("+json")
+
+  def parse_json(body)
+    JSON.parse(body.to_s)
+  rescue JSON::ParserError
+    :invalid
   end
 
   def resolves_to_passport(res)
@@ -96,9 +115,4 @@ class ResolveCheck
 
   def violation(message) = { severity: "violation", message: message }
 
-  def json_object?(body)
-    JSON.parse(body).is_a?(Hash)
-  rescue JSON::ParserError
-    false
-  end
 end
