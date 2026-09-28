@@ -3,21 +3,25 @@
 # of dpp-criteria requires for regular expressions inside a JSONPath expression.
 #
 # The pattern is parsed with the ABNF of RFC 9485, section 3, and translated
-# into an equivalent Ruby Regexp. `^` and `$` outside a character class are
-# anchors at the start and end of the whole value: the ABNF lists them as
-# ordinary characters, but the mappings of RFC 9485, section 5, and the
-# JSONPath Compliance Test Suite (match(): "explicit caret", "explicit dollar")
-# treat them as anchors, and dpplint follows that. Further differences to Ruby
-# and ECMA-262 that matter: `.` matches any character except LF and CR; only the escapes \( \) \* \+ \- \. \? \[ \\ \]
-# \^ \n \r \t \{ \| \} and the category escapes \p{..} and \P{..} exist (no \d,
+# into an equivalent Ruby Regexp. CRITERIA-FORMAT.md does not allow `^` or `$`
+# outside a character class (RFC 9485 lists them as ordinary characters, its
+# mappings in section 5 and the JSONPath Compliance Test Suite treat them as
+# anchors): such a pattern is unusable (Anchored), like an invalid one
+# (Invalid); `\^` counts as well. Differences to Ruby and ECMA-262 that
+# matter: `.` matches any character except LF and CR; only the escapes \( \) \*
+# \+ \- \. \? \[ \\ \] \n \r \t \{ \| \} and the category escapes \p{..} and \P{..} exist (no \d,
 # \w, \s); there are no lazy quantifiers, no {,m} and no non-capturing or other
 # special groups. Matching works on code points and is case-sensitive.
 #
-# match() holds if the entire value matches, search() if a substring does.
-# Following RFC 9535, the result is false if the value is not a string or the
-# pattern does not conform to RFC 9485.
+# match() holds if the entire value matches, search() if a substring does;
+# both are false if the value is not a string. Callers check patterns with
+# `problem` before evaluating the JSONPath: an unusable pattern makes the
+# criterion skipped ("Results"). match?/search? return false for one, as a
+# safeguard only.
 class IRegexp
-  class Invalid < StandardError; end
+  class Unusable < StandardError; end
+  class Invalid < Unusable; end
+  class Anchored < Unusable; end
 
   CATEGORIES = %w[L Ll Lm Lo Lt Lu M Mc Me Mn N Nd Nl No P Pc Pd Pe Pf Pi Po Ps Z Zl Zp Zs S Sc Sk Sm So C Cc Cf Cn Co].freeze
   SINGLE_ESCAPES = { "n" => 0x0A, "r" => 0x0D, "t" => 0x09 }.freeze
@@ -31,7 +35,7 @@ class IRegexp
     return false unless value.is_a?(String)
 
     Regexp.new("\\A(?:#{translate(pattern)})\\z").match?(value)
-  rescue Invalid
+  rescue Unusable
     false
   end
 
@@ -40,16 +44,18 @@ class IRegexp
     return false unless value.is_a?(String)
 
     Regexp.new(translate(pattern)).match?(value)
-  rescue Invalid
+  rescue Unusable
     false
   end
 
-  # nil for a pattern that conforms to RFC 9485, otherwise a reason.
+  # nil for a usable pattern, otherwise the reason.
   def self.problem(pattern)
     translate(pattern)
     nil
   rescue Invalid => e
     "is not a valid I-Regexp (RFC 9485): #{e.message}"
+  rescue Anchored => e
+    "contains #{e.message} outside a character class, which CRITERIA-FORMAT.md does not allow in JSONPath (use match() for a whole-value match)"
   end
 
   def self.translate(pattern)
@@ -111,8 +117,7 @@ class IRegexp
     when "(" then group
     when "." then @out << "[^\\n\\r]"
     when "[" then char_class
-    when "^" then @out << "\\A"
-    when "$" then @out << "\\z"
+    when "^", "$" then raise Anchored, c
     when "\\" then @out << escape_outside
     else
       raise Invalid, "#{c} is not allowed here" if SPECIAL.include?(c)
@@ -150,6 +155,7 @@ class IRegexp
 
     c = take
     return category(c) if %w[p P].include?(c)
+    raise Anchored, "\\^" if c == "^"
 
     char(single_escape(c))
   end

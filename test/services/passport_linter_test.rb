@@ -82,6 +82,18 @@ class PassportLinterTest < ActiveSupport::TestCase
     assert_match(/\Aregular expression "a\*\*" in applies_if is not a valid ECMA-262 regular expression/, result[:reason])
   end
 
+  test "applies_if with ^ in search() skips the criterion with a reason instead of evaluating it" do
+    criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
+                  "applies_if" => [{ "path" => "$.contentSpecificationIds[?search(@, '^[Bb]atter')]", "exists" => false }],
+                  "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
+    report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
+                           .run(passport: { "contentSpecificationIds" => ["Battery"] })
+    result = report[:criteria].first
+    assert_equal "skipped", result[:result]
+    assert_match(/of search\(\) in applies_if path .* contains \^ outside a character class/, result[:reason])
+    assert_equal "0 of 0 automated checks passed", report[:summary][:text]
+  end
+
   test "applies_if with search() whose condition does not hold skips the criterion" do
     criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
                   "applies_if" => [{ "path" => "$.contentSpecificationIds[?search(@, '[Bb]atter')]", "exists" => true }],

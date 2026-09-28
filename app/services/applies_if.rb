@@ -9,12 +9,16 @@
 # The string literal may be single- or double-quoted with the escapes of
 # RFC 9535, 2.3.1.1. The filter selects the elements of an array (or the
 # member values of an object) for which the function holds; search() and
-# match() evaluate their pattern as I-Regexp (RFC 9485, see IRegexp), are false
-# for values that are not strings and, following RFC 9535, false for a pattern
-# that does not conform to RFC 9485.
+# match() evaluate their pattern as I-Regexp (RFC 9485, see IRegexp) and are
+# false for values that are not strings. The pattern is checked before the
+# JSONPath is evaluated: an invalid I-Regexp or one with `^` or `$` outside a
+# character class makes the criterion skipped (see problem), as
+# CRITERIA-FORMAT.md requires, instead of letting the function return false.
 #
 # `matches` of the assertion itself is an ECMA-262 regular expression
-# (see EcmaRegexp), as for all JSON assertions.
+# (see EcmaRegexp), as for all JSON assertions. It holds only for JSON
+# strings; numbers, booleans, null, arrays and objects never satisfy it and
+# are not converted to text.
 class AppliesIf
   MEMBER = /[A-Za-z_\u0080-\u{10FFFF}][A-Za-z0-9_\u0080-\u{10FFFF}]*/
   SIMPLE = /\A\$\.(#{MEMBER})\z/
@@ -31,7 +35,10 @@ class AppliesIf
   # with such a condition is skipped.
   def self.problem(conditions)
     Array(conditions).each do |c|
-      parse_path(c["path"].to_s)
+      _member, function, pattern = parse_path(c["path"].to_s)
+      if function && (reason = IRegexp.problem(pattern))
+        return "regular expression #{pattern.inspect} of #{function}() in applies_if path #{c['path']} #{reason}"
+      end
       next unless c.key?("matches")
 
       reason = EcmaRegexp.problem(c["matches"])
@@ -112,7 +119,7 @@ class AppliesIf
     return !values.empty? == @c["exists"] if @c.key?("exists")
     return values.any? { |v| v == @c["equals"] } if @c.key?("equals")
     return values.any? { |v| @c["in"].include?(v) } if @c.key?("in")
-    return values.any? { |v| EcmaRegexp.search?(@c["matches"], v.to_s) } if @c.key?("matches")
+    return values.any? { |v| v.is_a?(String) && EcmaRegexp.search?(@c["matches"], v) } if @c.key?("matches")
 
     !values.empty?
   end
