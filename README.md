@@ -42,10 +42,13 @@ and do not establish a presumption of conformity.
 - `applies_if` supports the paths `$.<member>` and
   `$.<member>[?search(@, '<regex>')]` or `[?match(@, '<regex>')]`. The
   regular expression of `search()` and `match()` is an I-Regexp (RFC 9485) as
-  RFC 9535 requires: `match()` needs the entire value, `search()` a substring,
-  and a pattern that does not conform selects nothing. `matches` of the
-  condition itself is ECMA-262 as above. A condition dpplint cannot evaluate
-  skips the criterion with the reason.
+  RFC 9535 requires: `match()` needs the entire value, `search()` a substring.
+  The pattern is checked before the JSONPath is evaluated; an invalid I-Regexp
+  or one with `^` or `$` outside a character class skips the criterion with
+  the reason. `matches` of the condition itself is ECMA-262 as above and holds
+  only for JSON strings (numbers, booleans, null, arrays and objects never
+  satisfy it). Any other condition dpplint cannot evaluate also skips the
+  criterion with the reason.
 - Criteria with `check.type: did` send the DIDs of the passport to
   [didlint](https://didlint.ownyourdata.eu) (DID Core, DID Resolution) and
   check linked verifiable presentations for the VC Data Model 2.0 context. The

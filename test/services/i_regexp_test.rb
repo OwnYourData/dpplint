@@ -21,13 +21,21 @@ class IRegexpTest < ActiveSupport::TestCase
     refute IRegexp.search?("59040|PCDS|pcds", "Pcds")
   end
 
-  test "^ and $ anchor the whole value (Compliance Test Suite: explicit caret, explicit dollar)" do
-    assert IRegexp.match?("^ab.*", "abc")
-    refute IRegexp.match?("^ab.*", "xab")
-    assert IRegexp.match?(".*bc$", "abc")
-    refute IRegexp.match?(".*bc$", "abcx")
-    refute IRegexp.search?("^b", "a\nb")
-    refute IRegexp.search?("a$", "a\nb")
+  test "^ or $ outside a character class makes the pattern unusable (dpp-criteria 4b17bb8)" do
+    ["^ab.*", ".*bc$", "^[Bb]atter", "59040|PCDS$", "(^a)", "a\\^b"].each do |pattern|
+      assert_match(/\Acontains (\^|\$|\\\^) outside a character class/, IRegexp.problem(pattern), pattern)
+      refute IRegexp.search?(pattern, pattern.delete("^$\\")), pattern
+    end
+  end
+
+  test "^ and $ inside a character class are allowed" do
+    assert_nil IRegexp.problem("[^a]")
+    assert_nil IRegexp.problem("[a^]")
+    assert_nil IRegexp.problem("[$]")
+    assert_nil IRegexp.problem("[\\^]")
+    assert IRegexp.match?("[$]", "$")
+    assert IRegexp.match?("[a^]", "^")
+    refute IRegexp.match?("[^a]", "a")
   end
 
   test ". matches any character except LF and CR" do

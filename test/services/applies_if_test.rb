@@ -36,12 +36,17 @@ class AppliesIfTest < ActiveSupport::TestCase
     refute holds?(BAT_002, { "contentSpecificationIds" => "Battery" })
   end
 
-  test "a pattern that does not conform to RFC 9485 selects nothing (RFC 9535)" do
-    conditions = [{ "path" => "$.contentSpecificationIds[?search(@, '\\\\d+')]", "exists" => true }]
-    assert_nil AppliesIf.problem(conditions)
-    refute holds?(conditions, { "contentSpecificationIds" => ["59040"] })
-    absent = [{ "path" => "$.contentSpecificationIds[?search(@, '\\\\d+')]", "exists" => false }]
-    assert holds?(absent, { "contentSpecificationIds" => ["59040"] })
+  test "an invalid I-Regexp is found before the JSONPath is evaluated (dpp-criteria 4b17bb8)" do
+    conditions = [{ "path" => "$.contentSpecificationIds[?search(@, '\\\\d+')]", "exists" => false }]
+    assert_match(/\Aregular expression "\\\\d\+" of search\(\) in applies_if path .* is not a valid I-Regexp \(RFC 9485\)/,
+                 AppliesIf.problem(conditions))
+  end
+
+  test "^ or $ outside a character class in match() or search() is unusable" do
+    ["$.contentSpecificationIds[?search(@, '^[Bb]atter')]", "$.contentSpecificationIds[?match(@, 'pcds$')]"].each do |path|
+      assert_match(/in applies_if path .* contains [$^] outside a character class/, AppliesIf.problem([{ "path" => path, "exists" => true }]), path)
+    end
+    assert_nil AppliesIf.problem([{ "path" => "$.contentSpecificationIds[?match(@, '[^x]+')]", "exists" => true }])
   end
 
   test "JSONPath string literals: double quotes and escapes (RFC 9535, 2.3.1.1)" do
@@ -58,6 +63,18 @@ class AppliesIfTest < ActiveSupport::TestCase
     assert holds?([{ "path" => "$.facilityId", "exists" => true }], { "facilityId" => nil })
     assert holds?([{ "path" => "$.flag", "exists" => true }], { "flag" => false })
     assert holds?([{ "path" => "$.facilityId", "exists" => false }], {})
+  end
+
+  test "matches holds only for JSON strings; other values are not converted to text" do
+    condition = [{ "path" => "$.v", "matches" => "^(1|true|null)$" }]
+    assert holds?(condition, { "v" => "1" })
+    refute holds?(condition, { "v" => 1 })
+    refute holds?(condition, { "v" => true })
+    refute holds?(condition, { "v" => nil })
+    refute holds?([{ "path" => "$.v", "matches" => "a" }], { "v" => ["a"] })
+    refute holds?([{ "path" => "$.v", "matches" => "a" }], { "v" => { "k" => "a" } })
+    refute holds?([{ "path" => "$.v", "matches" => "59040" }], { "v" => 59040.0 })
+    assert holds?([{ "path" => "$.contentSpecificationIds[?search(@, '59040')]", "matches" => "DIN" }], { "contentSpecificationIds" => [59040, "DIN SPEC 59040"] })
   end
 
   test "matches of the assertion is ECMA-262, searched in the value" do
