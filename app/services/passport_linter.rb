@@ -79,6 +79,9 @@ class PassportLinter
     if (keys = resolve_check.unsupported).any?
       return base.merge(result: "skipped", reason: "expect #{keys.join(', ')} is not evaluated for check type resolve in this version")
     end
+    if (problem = resolve_check.pattern_problem)
+      return base.merge(result: "skipped", reason: problem)
+    end
 
     messages = resolve_check.messages
     base.merge(result: result_for(messages), messages: messages)

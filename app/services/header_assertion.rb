@@ -8,7 +8,9 @@
 # - `contains`: the combined value, split at commas and trimmed, has a member
 #   equal to the string, compared case-insensitively ("Vary: *" therefore does
 #   not contain "Accept");
-# - `matches`: the regular expression is found in the combined value;
+# - `matches`: the ECMA-262 regular expression is found anywhere in the
+#   combined value, case-sensitively (see EcmaRegexp); an invalid pattern
+#   raises EcmaRegexp::Error, callers check patterns beforehand (problem);
 # - a missing field fails every assertion except `exists: false`;
 # - `severity: warning` reports a failure as a warning instead of a violation.
 class HeaderAssertion
@@ -27,6 +29,18 @@ class HeaderAssertion
   def self.field(headers, name)
     values = (headers || {}).select { |key, _| key.to_s.casecmp?(name.to_s) }.values.flatten.map(&:to_s)
     values.empty? ? nil : values.join(", ")
+  end
+
+  # The first pattern of `matches` in the assertions that dpplint cannot
+  # evaluate, as a reason, or nil.
+  def self.problem(assertions)
+    Array(assertions).each do |assertion|
+      next unless assertion.key?("matches")
+
+      reason = EcmaRegexp.problem(assertion["matches"])
+      return "regular expression #{assertion['matches'].to_s.inspect} for header #{assertion['name']} #{reason}" if reason
+    end
+    nil
   end
 
   def initialize(assertion)
@@ -49,11 +63,9 @@ class HeaderAssertion
     holds = case op
             when "equals" then value == expected.to_s
             when "contains" then value.split(",").map(&:strip).any? { |member| member.casecmp?(expected.to_s) }
-            when "matches" then Regexp.new(expected.to_s).match?(value)
+            when "matches" then EcmaRegexp.search?(expected, value)
             end
     holds ? nil : "header #{@name} is #{value.inspect}, expected #{describe(op, expected)}"
-  rescue RegexpError => e
-    "regular expression #{expected.inspect} for header #{@name} is invalid (#{e.message})"
   end
 
   def exists(expected, value)

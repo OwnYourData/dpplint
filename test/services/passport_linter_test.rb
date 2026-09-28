@@ -52,7 +52,7 @@ class PassportLinterTest < ActiveSupport::TestCase
   end
 
   test "a failing error check fails the criterion, whatever the warnings" do
-    report = lint("text/html" => [200, "application/json", '{"a":1}', { "vary" => ["Origin"] }], "*/*" => JSON_OK)
+    report = lint("text/html" => [200, "application/json", '{"a":1}', { "vary" => ["Origin"] }], "*/*" => [200, "text/html", "<html></html>"])
     result = report[:criteria].first
     assert_equal "failed", result[:result]
     assert_equal %w[violation warning], result[:messages].map { |m| m[:severity] }
@@ -70,5 +70,19 @@ class PassportLinterTest < ActiveSupport::TestCase
     result = lint({}, check)[:criteria].first
     assert_equal "skipped", result[:result]
     assert_equal "expect json is not evaluated for check type resolve in this version", result[:reason]
+  end
+
+  test "a pattern that is not valid ECMA-262 skips the criterion with a reason, without a request" do
+    check = CHECK.merge("expect" => CHECK["expect"].merge("headers" => [{ "name" => "Vary", "matches" => "(?i)accept" }]))
+    result = lint({}, check)[:criteria].first
+    assert_equal "skipped", result[:result]
+    assert_match(/\Aregular expression "\(\?i\)accept" for header Vary is not a valid ECMA-262 regular expression/, result[:reason])
+  end
+
+  test "a pattern outside the portable subset skips the criterion with a reason" do
+    check = CHECK.merge("further_requests" => [{ "accept" => "*/*", "expect" => { "headers" => [{ "name" => "Vary", "matches" => "(?=Accept)" }] } }])
+    result = lint({}, check)[:criteria].first
+    assert_equal "skipped", result[:result]
+    assert_match(/uses a feature outside the portable subset of CRITERIA-FORMAT.md that dpplint does not evaluate \(lookahead\)/, result[:reason])
   end
 end

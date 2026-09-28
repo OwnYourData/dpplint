@@ -26,10 +26,15 @@ and do not establish a presumption of conformity.
 - Criteria with `check.type: resolve` request the product identifier
   themselves (with the Accept header the criterion names) and need
   `GET /api/v1/validate/<product identifier>`; with `POST` they are skipped.
-  `expect` checks status, content type and header fields (`exists`,
-  `equals`, `contains`, `matches`; field names case-insensitive, several
-  fields of one name combined with commas). `further_requests` are sent
-  afterwards with their own Accept header and evaluated independently. A
+  `expect` checks status and content type first and the header fields
+  (`exists`, `equals`, `contains`, `matches`; field names case-insensitive,
+  several fields of one name combined with commas) only if both hold.
+  `matches` is an ECMA-262 regular expression without flags, searched
+  anywhere in the value and case-sensitive (`^` and `$` anchor the whole
+  value); a criterion with a pattern that is not valid ECMA-262, or that uses
+  lookaround, named groups or backreferences, is skipped with the reason.
+  `further_requests` are sent afterwards with their own Accept header and
+  evaluated independently. A
   criterion fails if a check with severity error fails; if only checks with
   `severity: warning` fail, the result is `warning`.
 - Criteria with `check.type: did` send the DIDs of the passport to
