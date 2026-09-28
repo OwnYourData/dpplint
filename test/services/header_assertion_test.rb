@@ -37,13 +37,38 @@ class HeaderAssertionTest < ActiveSupport::TestCase
     refute holds?({ "name" => "Vary", "contains" => "Accept" }, { "vary" => ["*"] })
   end
 
-  test "matches searches the whole value" do
-    assert holds?({ "name" => "Cache-Control", "matches" => "max-age=\\d+" }, { "cache-control" => ["public, max-age=300"] })
-    refute holds?({ "name" => "Cache-Control", "matches" => "\\Ano-store\\z" }, { "cache-control" => ["public, no-store"] })
+  test "matches searches the pattern anywhere in the value, without implicit anchoring" do
+    assert holds?({ "name" => "Cache-Control", "matches" => "max-age=[0-9]+" }, { "cache-control" => ["public, max-age=300"] })
+    refute holds?({ "name" => "Cache-Control", "matches" => "^no-store$" }, { "cache-control" => ["public, no-store"] })
+    assert holds?({ "name" => "Cache-Control", "matches" => "^public, no-store$" }, { "cache-control" => ["public, no-store"] })
   end
 
-  test "invalid regular expression fails with a message" do
-    assert_match(/regular expression "\(" for header X-Test is invalid/, problems({ "name" => "X-Test", "matches" => "(" }, { "x-test" => ["a"] }).first)
+  test "matches: ^ and $ anchor the whole value, also when it contains a line break" do
+    headers = { "x-test" => ["first\nsecond"] }
+    refute holds?({ "name" => "X-Test", "matches" => "^second" }, headers)
+    refute holds?({ "name" => "X-Test", "matches" => "first$" }, headers)
+    assert holds?({ "name" => "X-Test", "matches" => "^first" }, headers)
+    assert holds?({ "name" => "X-Test", "matches" => "second$" }, headers)
+    assert holds?({ "name" => "X-Test", "matches" => "^first\\nsecond$" }, headers)
+  end
+
+  test "matches is case-sensitive" do
+    headers = { "cache-control" => ["Max-Age=300"] }
+    refute holds?({ "name" => "Cache-Control", "matches" => "max-age" }, headers)
+    assert holds?({ "name" => "Cache-Control", "matches" => "Max-Age" }, headers)
+  end
+
+  test "matches uses ECMA-262 syntax, where \\A is the letter A" do
+    refute holds?({ "name" => "Vary", "matches" => "\\AAccept" }, { "vary" => ["Accept"] })
+    assert holds?({ "name" => "Vary", "matches" => "\\AAccept" }, { "vary" => ["AAccept"] })
+  end
+
+  test "problem names an invalid pattern and a pattern outside the portable subset" do
+    assert_nil HeaderAssertion.problem([{ "name" => "Vary", "matches" => "^Accept" }, { "name" => "Vary", "exists" => true }])
+    assert_match(/\Aregular expression "\(" for header X-Test is not a valid ECMA-262 regular expression/,
+                 HeaderAssertion.problem([{ "name" => "X-Test", "matches" => "(" }]))
+    assert_match(/\Aregular expression "\(\?=a\)" for header X-Test uses a feature outside the portable subset .*\(lookahead\)/,
+                 HeaderAssertion.problem([{ "name" => "X-Test", "matches" => "(?=a)" }]))
   end
 
   test "missing field fails equals, contains and matches" do

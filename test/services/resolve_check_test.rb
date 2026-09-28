@@ -132,6 +132,65 @@ class ResolveCheckTest < ActiveSupport::TestCase
     assert_empty result
   end
 
+  # Order of evaluation within a request (dpp-criteria 4fcfe5c)
+
+  VARY_ACCEPT = [{ "name" => "Vary", "contains" => "Accept" }].freeze
+
+  test "wrong status: header fields are not evaluated" do
+    check = { "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => VARY_ACCEPT) }
+    assert_equal ["HTTP status is 404, expected 200"], violations(check, default: [404, "application/json", "{}", { "vary" => ["Origin"] }])
+  end
+
+  test "wrong content type: header fields are not evaluated" do
+    check = { "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => VARY_ACCEPT) }
+    assert_equal ["Content-Type is text/html, expected application/json"],
+                 violations(check, default: [200, "text/html", "<html></html>", { "vary" => ["Origin"] }])
+  end
+
+  test "wrong status and content type: both reported, header fields not evaluated" do
+    check = { "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => VARY_ACCEPT) }
+    assert_equal ["HTTP status is 500, expected 200", "Content-Type is text/html, expected application/json"],
+                 violations(check, default: [500, "text/html", "<html></html>"])
+  end
+
+  test "status and content type hold: header fields are evaluated" do
+    check = { "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => VARY_ACCEPT) }
+    assert_equal ['header Vary is "Origin", expected a member "Accept"'],
+                 violations(check, default: [200, "application/json", passport, { "vary" => ["Origin"] }])
+  end
+
+  test "further request with wrong status or content type: its header fields are not evaluated" do
+    further = { "accept" => "text/html", "expect" => HTML.merge("headers" => VARY_ACCEPT) }
+    check = { "type" => "resolve", "expect" => JSON_EXPECT, "further_requests" => [further] }
+    assert_equal ["request with Accept text/html: HTTP status is 406, expected 200"],
+                 violations(check, "text/html" => [406, "text/html", "", { "vary" => ["Origin"] }], default: [200, "application/json", passport])
+    assert_equal ["request with Accept text/html: Content-Type is application/json, expected text/html"],
+                 violations(check, "text/html" => [200, "application/json", passport, { "vary" => ["Origin"] }], default: [200, "application/json", passport])
+  end
+
+  test "further request with status and content type as expected: its header fields are evaluated" do
+    further = { "accept" => "text/html", "severity" => "warning", "expect" => HTML.merge("headers" => VARY_ACCEPT) }
+    check = { "type" => "resolve", "expect" => JSON_EXPECT, "further_requests" => [further] }
+    result = messages(check, "text/html" => [200, "text/html", "<html></html>", { "vary" => ["Origin"] }], default: [200, "application/json", passport])
+    assert_equal [{ severity: "warning", message: 'request with Accept text/html: header Vary is "Origin", expected a member "Accept"' }], result
+  end
+
+  test "a failing first request does not stop the header fields of a further request" do
+    further = { "accept" => "text/html", "expect" => HTML.merge("headers" => VARY_ACCEPT) }
+    check = { "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => VARY_ACCEPT), "further_requests" => [further] }
+    result = violations(check, "text/html" => [200, "text/html", "<html></html>", { "vary" => ["Origin"] }], default: [404, "application/json", "{}"])
+    assert_equal ["HTTP status is 404, expected 200", 'request with Accept text/html: header Vary is "Origin", expected a member "Accept"'], result
+  end
+
+  test "invalid or non-portable patterns are reported before any request" do
+    resolver = FakeResolver.new({})
+    check = { "type" => "resolve", "expect" => JSON_EXPECT,
+              "further_requests" => [{ "accept" => "*/*", "expect" => { "headers" => [{ "name" => "Vary", "matches" => "a**" }] } }] }
+    assert_match(/\Aregular expression "a\*\*" for header Vary is not a valid ECMA-262 regular expression/, ResolveCheck.new(check, UPI, resolver).pattern_problem)
+    assert_nil ResolveCheck.new({ "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => [{ "name" => "Vary", "matches" => "^Accept" }]) }, UPI, resolver).pattern_problem
+    assert_empty resolver.requested
+  end
+
   test "expect parts not evaluated for resolve are reported" do
     check = { "type" => "resolve", "expect" => { "status" => [200], "json" => [{ "path" => "$.a", "exists" => true }] },
               "further_requests" => [{ "accept" => "*/*", "expect" => { "body_equals_step" => 1 } }] }
@@ -139,7 +198,7 @@ class ResolveCheckTest < ActiveSupport::TestCase
     assert_empty ResolveCheck.new({ "type" => "resolve", "expect" => HTML }, UPI, FakeResolver.new({})).unsupported
   end
 
-  # DPP-DAT-016 version 2 (dpp-criteria 4c155ee)
+  # DPP-DAT-016 version 2 (dpp-criteria 4c155ee, order of evaluation 4fcfe5c)
 
   DAT_016 = {
     "type" => "resolve", "accept" => "text/html",
@@ -160,11 +219,16 @@ class ResolveCheckTest < ActiveSupport::TestCase
     assert_equal %w[warning warning], result
   end
 
-  test "DPP-DAT-016: JSON on an HTML request is a violation" do
+  test "DPP-DAT-016: JSON on an HTML request is a violation, without a Vary warning about the JSON response" do
     result = messages(DAT_016, "text/html" => [200, "application/json; charset=utf-8", passport, { "vary" => ["Origin"] }],
                                "*/*" => [200, "application/json", passport])
-    assert_equal [["violation", "Content-Type is application/json; charset=utf-8, expected text/html"],
-                  ["warning", 'header Vary is "Origin", expected a member "Accept"']],
+    assert_equal [["violation", "Content-Type is application/json; charset=utf-8, expected text/html"]],
                  result.map { |m| [m[:severity], m[:message]] }
+  end
+
+  test "DPP-DAT-016: HTML without Vary Accept and JSON for */* gives one warning" do
+    result = messages(DAT_016, "text/html" => [200, "text/html", "<html></html>", { "vary" => ["Origin"] }],
+                               "*/*" => [200, "application/json", passport])
+    assert_equal [["warning", 'header Vary is "Origin", expected a member "Accept"']], result.map { |m| [m[:severity], m[:message]] }
   end
 end

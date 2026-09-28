@@ -3,9 +3,11 @@
 # The first request follows the identifier with the Accept header of the
 # criterion (`accept`). Without `expect`, it has to resolve to a single
 # passport object whose uniqueProductIdentifier equals the identifier. With
-# `expect`, its status, content type and header fields (`headers`, see
-# HeaderAssertion) are checked instead; an expected JSON content type also
-# requires the body to be a JSON object.
+# `expect`, its status and content type are checked instead; an expected JSON
+# content type also requires the body to be a JSON object. Following "Order of
+# evaluation within a request" in CRITERIA-FORMAT.md, the header fields
+# (`headers`, see HeaderAssertion) are evaluated only if status and content
+# type hold; otherwise they give no message of their own.
 #
 # `further_requests` are sent after the first request to the same identifier,
 # each with its own `accept` and `expect`, and are evaluated independently of
@@ -24,8 +26,14 @@ class ResolveCheck
   # Keys of an `expect` block this version does not evaluate. A criterion that
   # uses one is skipped rather than passed without that part.
   def unsupported
-    expects = [@check["expect"], *Array(@check["further_requests"]).map { |r| r["expect"] }]
-    expects.compact.flat_map { |e| e.keys - SUPPORTED_EXPECT }.uniq
+    expects.flat_map { |e| e.keys - SUPPORTED_EXPECT }.uniq
+  end
+
+  # A reason if a regular expression of the criterion cannot be evaluated
+  # (not valid ECMA-262 or outside the portable subset), otherwise nil. Such a
+  # criterion is skipped.
+  def pattern_problem
+    expects.lazy.map { |e| HeaderAssertion.problem(e["headers"]) }.find(&:itself)
   end
 
   # Returns messages { severity: "violation" | "warning", message: }; none means passed.
@@ -39,6 +47,8 @@ class ResolveCheck
 
   private
 
+  def expects = [@check["expect"], *Array(@check["further_requests"]).map { |r| r["expect"] }].compact
+
   def request(accept, expect, severity: nil, label: nil)
     res = @resolver.get(@product_id, accept: accept)
     out = if res.error then [violation(res.error)]
@@ -49,7 +59,15 @@ class ResolveCheck
     label ? out.map { |m| m.merge(message: "#{label}: #{m[:message]}") } : out
   end
 
+  # status and content type first; header fields only if both hold.
   def expected(res, expect)
+    out = status_and_content_type(res, expect)
+    return out if out.any?
+
+    HeaderAssertion.messages(expect["headers"], res.headers)
+  end
+
+  def status_and_content_type(res, expect)
     out = []
     if expect["status"] && !expect["status"].include?(res.status)
       out << violation("HTTP status is #{res.status}, expected #{expect['status'].join(' or ')}")
@@ -61,7 +79,7 @@ class ResolveCheck
         out << violation("response is not a single JSON object")
       end
     end
-    out + HeaderAssertion.messages(expect["headers"], res.headers)
+    out
   end
 
   def resolves_to_passport(res)
