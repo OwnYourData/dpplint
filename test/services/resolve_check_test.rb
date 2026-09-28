@@ -48,6 +48,36 @@ class ResolveCheckTest < ActiveSupport::TestCase
     assert_match(/single JSON object/, violations(check, default: [200, "application/json", "[1,2]"]).first)
   end
 
+  # content_type (dpp-criteria 203202e): media type without parameters,
+  # case-insensitive; JSON media types need a body that is a single JSON object
+
+  test "content type: parameters and case are ignored" do
+    check = { "type" => "resolve", "expect" => { "status" => [200], "content_type" => "application/json" } }
+    assert_empty violations(check, default: [200, "Application/JSON ; Charset=UTF-8", passport])
+    html = { "type" => "resolve", "accept" => "text/html", "expect" => { "status" => [200], "content_type" => "Text/HTML" } }
+    assert_empty violations(html, "text/html" => [200, "text/html;charset=utf-8", "<html></html>"])
+  end
+
+  test "content type: application/ld+json is a JSON media type" do
+    check = { "type" => "resolve", "accept" => "application/ld+json", "expect" => { "status" => [200], "content_type" => "application/ld+json" } }
+    assert_empty violations(check, "application/ld+json" => [200, "application/ld+json; charset=utf-8", passport])
+    assert_equal ["response is not valid JSON"], violations(check, "application/ld+json" => [200, "application/ld+json", "{no json"])
+    assert_equal ["response is not a single JSON object"], violations(check, "application/ld+json" => [200, "APPLICATION/LD+JSON", "[#{passport}]"])
+    assert_equal ["Content-Type is application/json, expected application/ld+json"],
+                 violations(check, "application/ld+json" => [200, "application/json", passport])
+  end
+
+  test "content type: a body that is not JSON fails the content type check, headers are not evaluated" do
+    check = { "type" => "resolve", "expect" => JSON_EXPECT.merge("headers" => [{ "name" => "Vary", "contains" => "Accept" }]) }
+    assert_equal ["response is not valid JSON"], violations(check, default: [200, "application/json", "", { "vary" => ["Origin"] }])
+    assert_equal ["response is not a single JSON object"], violations(check, default: [200, "application/json", "2", { "vary" => ["Origin"] }])
+  end
+
+  test "content type: a type that is not JSON does not require a JSON body" do
+    check = { "type" => "resolve", "accept" => "text/plain", "expect" => { "status" => [200], "content_type" => "text/plain" } }
+    assert_empty violations(check, "text/plain" => [200, "text/plain; charset=utf-8", "{no json"])
+  end
+
   test "HTML requested but JSON delivered fails" do
     check = { "type" => "resolve", "accept" => "text/html", "expect" => { "status" => [200], "content_type" => "text/html" } }
     result = violations(check, "text/html" => [200, "application/json", passport], default: [200, "application/json", passport])

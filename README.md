@@ -26,7 +26,9 @@ and do not establish a presumption of conformity.
 - Criteria with `check.type: resolve` request the product identifier
   themselves (with the Accept header the criterion names) and need
   `GET /api/v1/validate/<product identifier>`; with `POST` they are skipped.
-  `expect` checks status and content type first and the header fields
+  `expect` checks status and content type first (media type without
+  parameters, case-insensitive; for `application/json` and `+json` types the
+  body must be a single JSON object) and the header fields
   (`exists`, `equals`, `contains`, `matches`; field names case-insensitive,
   several fields of one name combined with commas) only if both hold.
   `matches` is an ECMA-262 regular expression without flags, searched
@@ -37,6 +39,13 @@ and do not establish a presumption of conformity.
   evaluated independently. A
   criterion fails if a check with severity error fails; if only checks with
   `severity: warning` fail, the result is `warning`.
+- `applies_if` supports the paths `$.<member>` and
+  `$.<member>[?search(@, '<regex>')]` or `[?match(@, '<regex>')]`. The
+  regular expression of `search()` and `match()` is an I-Regexp (RFC 9485) as
+  RFC 9535 requires: `match()` needs the entire value, `search()` a substring,
+  and a pattern that does not conform selects nothing. `matches` of the
+  condition itself is ECMA-262 as above. A condition dpplint cannot evaluate
+  skips the criterion with the reason.
 - Criteria with `check.type: did` send the DIDs of the passport to
   [didlint](https://didlint.ownyourdata.eu) (DID Core, DID Resolution) and
   check linked verifiable presentations for the VC Data Model 2.0 context. The

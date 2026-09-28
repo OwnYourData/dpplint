@@ -1,11 +1,105 @@
 # Evaluates the applies_if conditions of a criterion on the passport JSON.
-# Supported paths: "$.attribute" and "$.attribute[?search(@, '<regex>')]".
+# Each condition is a JSON assertion (CRITERIA-FORMAT.md): a JSONPath `path`
+# and one of `exists`, `equals`, `in`, `matches`.
+#
+# Supported paths (RFC 9535):
+#   $.<member>
+#   $.<member>[?search(@, '<I-Regexp>')]
+#   $.<member>[?match(@, '<I-Regexp>')]
+# The string literal may be single- or double-quoted with the escapes of
+# RFC 9535, 2.3.1.1. The filter selects the elements of an array (or the
+# member values of an object) for which the function holds; search() and
+# match() evaluate their pattern as I-Regexp (RFC 9485, see IRegexp), are false
+# for values that are not strings and, following RFC 9535, false for a pattern
+# that does not conform to RFC 9485.
+#
+# `matches` of the assertion itself is an ECMA-262 regular expression
+# (see EcmaRegexp), as for all JSON assertions.
 class AppliesIf
-  SIMPLE = /\A\$\.([A-Za-z_][A-Za-z0-9_]*)\z/
-  SEARCH = /\A\$\.([A-Za-z_][A-Za-z0-9_]*)\[\?search\(@,\s*'(.*)'\)\]\z/
+  MEMBER = /[A-Za-z_\u0080-\u{10FFFF}][A-Za-z0-9_\u0080-\u{10FFFF}]*/
+  SIMPLE = /\A\$\.(#{MEMBER})\z/
+  FILTER = /\A\$\.(#{MEMBER})\[\s*\?\s*(match|search)\(\s*@\s*,\s*(.*)\s*\)\s*\]\z/m
+  ESCAPES = { "b" => "\b", "f" => "\f", "n" => "\n", "r" => "\r", "t" => "\t", "/" => "/", "\\" => "\\" }.freeze
+
+  class Unsupported < StandardError; end
 
   def self.holds?(conditions, passport)
     Array(conditions).all? { |c| new(c, passport).holds? }
+  end
+
+  # nil if every condition can be evaluated, otherwise the reason. A criterion
+  # with such a condition is skipped.
+  def self.problem(conditions)
+    Array(conditions).each do |c|
+      parse_path(c["path"].to_s)
+      next unless c.key?("matches")
+
+      reason = EcmaRegexp.problem(c["matches"])
+      return "regular expression #{c['matches'].to_s.inspect} in applies_if #{reason}" if reason
+    end
+    nil
+  rescue Unsupported => e
+    e.message
+  end
+
+  # [member, nil, nil] or [member, "match" | "search", pattern]
+  def self.parse_path(path)
+    if (m = path.match(SIMPLE))
+      [m[1], nil, nil]
+    elsif (m = path.match(FILTER))
+      [m[1], m[2], string_literal(m[3].rstrip)]
+    else
+      raise Unsupported, "applies_if path #{path} is not supported in this version"
+    end
+  end
+
+  # A JSONPath string literal (RFC 9535, 2.3.1.1).
+  def self.string_literal(literal)
+    quote = literal[0]
+    unless literal.size >= 2 && %w[' "].include?(quote) && literal[-1] == quote
+      raise Unsupported, "applies_if: #{literal} is not a JSONPath string literal"
+    end
+
+    chars = literal[1...-1].chars
+    out = +""
+    until chars.empty?
+      c = chars.shift
+      if c == "\\"
+        out << unescape(chars, quote, literal)
+      elsif c == quote || c.ord < 0x20
+        raise Unsupported, "applies_if: #{literal} is not a valid JSONPath string literal"
+      else
+        out << c
+      end
+    end
+    out
+  end
+
+  def self.unescape(chars, quote, literal)
+    e = chars.shift
+    return e if e == quote
+    return ESCAPES[e] if ESCAPES.key?(e)
+    raise Unsupported, "applies_if: invalid escape in JSONPath string literal #{literal}" unless e == "u"
+
+    code = hex4(chars, literal)
+    if (0xD800..0xDBFF).cover?(code)
+      raise Unsupported, "applies_if: lone surrogate in #{literal}" unless chars.shift(2) == ["\\", "u"]
+
+      low = hex4(chars, literal)
+      raise Unsupported, "applies_if: lone surrogate in #{literal}" unless (0xDC00..0xDFFF).cover?(low)
+
+      code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+    elsif (0xDC00..0xDFFF).cover?(code)
+      raise Unsupported, "applies_if: lone surrogate in #{literal}"
+    end
+    code.chr(Encoding::UTF_8)
+  end
+
+  def self.hex4(chars, literal)
+    hex = chars.shift(4).join
+    raise Unsupported, "applies_if: invalid \\u escape in #{literal}" unless hex.match?(/\A\h{4}\z/)
+
+    hex.to_i(16)
   end
 
   def initialize(condition, passport)
@@ -15,24 +109,28 @@ class AppliesIf
 
   def holds?
     values = select
-    return values.any? == @c["exists"] if @c.key?("exists")
+    return !values.empty? == @c["exists"] if @c.key?("exists")
     return values.any? { |v| v == @c["equals"] } if @c.key?("equals")
     return values.any? { |v| @c["in"].include?(v) } if @c.key?("in")
-    return values.any? { |v| v.to_s.match?(Regexp.new(@c["matches"])) } if @c.key?("matches")
+    return values.any? { |v| EcmaRegexp.search?(@c["matches"], v.to_s) } if @c.key?("matches")
 
-    values.any?
+    !values.empty?
   end
 
   private
 
   def select
-    path = @c["path"].to_s
-    if (m = path.match(SIMPLE))
-      @passport.key?(m[1]) ? [@passport[m[1]]] : []
-    elsif (m = path.match(SEARCH))
-      Array(@passport[m[1]]).select { |v| v.to_s.match?(Regexp.new(m[2])) }
-    else
-      raise ArgumentError, "unsupported applies_if path #{path}"
-    end
+    member, function, pattern = self.class.parse_path(@c["path"].to_s)
+    return [] unless @passport.is_a?(Hash) && @passport.key?(member)
+
+    value = @passport[member]
+    return [value] unless function
+
+    candidates = case value
+                 when Array then value
+                 when Hash then value.values
+                 else []
+                 end
+    candidates.select { |v| IRegexp.public_send("#{function}?", pattern, v) }
   end
 end
