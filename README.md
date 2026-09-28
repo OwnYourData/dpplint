@@ -38,15 +38,15 @@ and do not establish a presumption of conformity.
   didlint instance is set with `DIDLINT_URL` (default
   `https://didlint.ownyourdata.eu`); it is the only service dpplint calls
   besides the passport and the resources it links.
-- Criteria with `check.type: proof` verify integrity proofs of the passport
-  against a key of the economic operator:
+- Criteria with `check.type: proof` check integrity proofs of the passport.
+  Without `key_from` (DPP-SEC-002) every proof found is verified with the key
+  it names:
   - W3C Data Integrity proofs in the passport (`DataIntegrityProof`,
-    cryptosuite `eddsa-jcs-2022`);
-  - the passport as compact JWS (VC-JOSE-COSE, `EdDSA` or `ES256`, key named
-    by `kid`). With `GET`, dpplint also requests the identifier with
+    cryptosuite `eddsa-jcs-2022`, key from `verificationMethod`);
+  - the passport as compact JWS (VC-JOSE-COSE, `EdDSA` or `ES256`, key from
+    `kid`). With `GET`, dpplint also requests the identifier with
     `Accept: application/vc+jwt, application/jwt, application/jose`; a JWS
-    delivered that way has to carry the same passport as the JSON answer.
-
+    delivered that way has to carry the same passport as the JSON answer;
   - the passport DID (`digitalProductPassportId`, `did:oyd`): its DID
     document, resolved by didlint in the current version, carries in the
     service of type `DigitalProductPassport` a `payloadHash` (SHA-256
@@ -55,11 +55,12 @@ and do not establish a presumption of conformity.
     `serviceEndpoint` and with the bytes delivered for the product identifier
     (with `POST`: with the content sent).
 
-  Keys for Data Integrity and JWS are taken from a `did:key` or from the DID
-  document resolved by didlint (Ed25519 or P-256, as `publicKeyMultibase` or
-  `publicKeyJwk`).
-  Passports without a proof, and other proof formats, are reported as
-  `skipped`.
+  With `key_from` (DPP-SEC-013) at least one verified proof has to be issued
+  with a key of the DID at that path (the economic operator); otherwise the
+  result is a warning. Keys are taken from a `did:key` or from the DID document
+  resolved by didlint (Ed25519 or P-256, as `publicKeyMultibase` or
+  `publicKeyJwk`). Passports without a proof, and other proof formats, are
+  reported as `skipped`.
 - Criteria with `check.type: links` check every `RelatedResource` of the
   passport for the required attributes and send a HEAD request to its URL
   (at most 20 URLs per passport). A URL that does not answer gives a warning.

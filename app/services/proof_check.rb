@@ -1,25 +1,35 @@
 require "openssl"
 
-# Runs a criterion with check.type proof (DPP-SEC-002): integrity proofs of the
-# passport are verified against a key of the DID found at check.key_from (the
-# economic operator).
+# Runs criteria with check.type proof.
 #
-# Supported formats:
+# Without check.key_from (DPP-SEC-002): the integrity of the passport has to be
+# verifiable with at least one of check.formats; every proof found is verified
+# with the key it names.
+# With check.key_from (DPP-SEC-013): at least one verified proof has to be
+# issued by the DID at key_from (the economic operator); otherwise a warning.
+#
+# Formats:
 # - vc-data-integrity: W3C Data Integrity proofs (member "proof") with the
-#   cryptosuite eddsa-jcs-2022;
+#   cryptosuite eddsa-jcs-2022; key from verificationMethod;
 # - vc-jose-cose: the passport as compact JWS (application/vc+jwt), signed
-#   with EdDSA or ES256, whose header kid names the key. If the passport was
-#   also delivered as plain JSON, the JWS payload has to be the same passport;
+#   with EdDSA or ES256; key from the header kid. If the passport was also
+#   delivered as plain JSON, the JWS payload has to be the same passport;
 # - did-oyd-log: the DID document of digitalProductPassportId (did:oyd,
 #   resolved by didlint, current version) carries in its service of type
 #   DigitalProductPassport a payloadHash: SHA-256 multihash (base58btc) of the
 #   passport bytes as delivered by that service's serviceEndpoint. The bytes
-#   delivered for the product identifier have to be the same.
+#   delivered for the product identifier have to be the same. The attestation
+#   is made with the key of the passport DID.
 # Passports without a proof, and proofs in formats this version does not
-# verify, are skipped. Keys for Data Integrity and JWS come from did:key
-# directly or from the DID document resolved by didlint.
+# verify, are skipped. Keys come from did:key directly or from the DID
+# document resolved by didlint.
 class ProofCheck
   Outcome = Struct.new(:skipped, :messages, keyword_init: true)
+  # One proof found in the passport: format, DID of the signer, and the
+  # messages of its verification (none with severity violation = verified).
+  Proof = Struct.new(:format, :signer, :messages, keyword_init: true) do
+    def verified? = messages.none? { |m| m[:severity] == "violation" }
+  end
 
   CRYPTOSUITES = %w[eddsa-jcs-2022].freeze
   PASSPORT_SERVICE = "DigitalProductPassport".freeze
@@ -39,25 +49,8 @@ class ProofCheck
   end
 
   def outcome
-    @messages = []
-    @verified = 0
-    @unsupported = []
-    @notes = []
-
-    if @passport.key?("proof") || @jws
-      operator = @passport[@check["key_from"].to_s.delete_prefix("$.")]
-      if did?(operator)
-        data_integrity(operator) if @passport.key?("proof")
-        jose(operator) if @jws
-      else
-        @notes << "#{@check['key_from']} is not a DID, so the key of the economic operator cannot be determined"
-      end
-    end
-    oyd_log if Array(@check["formats"]).include?("did-oyd-log")
-
-    return Outcome.new(messages: @messages) unless @messages.empty? && @verified.zero?
-
-    skip(skip_reason)
+    analyse
+    @check["key_from"] ? issuer_outcome : integrity_outcome
   end
 
   # SHA-256 multihash, base58btc with prefix z (zQm...).
@@ -81,6 +74,42 @@ class ProofCheck
 
   private
 
+  def formats = Array(@check["formats"])
+
+  def analyse
+    @proofs = []
+    @unsupported = []
+    @notes = []
+    data_integrity if formats.include?("vc-data-integrity") && @passport.key?("proof")
+    jose if formats.include?("vc-jose-cose") && @jws
+    oyd_log if formats.include?("did-oyd-log")
+  end
+
+  def integrity_outcome
+    return skip(skip_reason) if @proofs.empty?
+
+    Outcome.new(messages: @proofs.flat_map(&:messages))
+  end
+
+  def issuer_outcome
+    verified = @proofs.select(&:verified?)
+    return skip("no verified integrity proof (#{skip_reason.presence || 'see the integrity check'})") if verified.empty?
+
+    operator = @passport[@check["key_from"].delete_prefix("$.")]
+    return skip("#{@check['key_from']} is not a DID, so the issuer of the proof cannot be compared with it") unless did?(operator)
+    return Outcome.new(messages: []) if verified.any? { |p| p.signer == operator }
+
+    Outcome.new(messages: verified.map { |p| warning(issuer_message(p, operator)) })
+  end
+
+  def issuer_message(proof, operator)
+    if proof.format == "did-oyd-log"
+      "the content is attested with the key of the passport DID #{proof.signer}, which is not linked to the economic operator #{operator}"
+    else
+      "the #{proof.format} proof is signed by #{proof.signer}, not by the economic operator #{operator}; an authorised representative cannot be recognised automatically"
+    end
+  end
+
   def skip_reason
     reasons = []
     unless @passport.key?("proof") || @jws || @notes.any? { |n| n.start_with?("the DID document") }
@@ -92,6 +121,65 @@ class ProofCheck
     end
     (reasons + @notes).join("; ")
   end
+
+  # --- vc-data-integrity ---
+
+  def data_integrity
+    proofs = @passport["proof"].is_a?(Array) ? @passport["proof"] : [@passport["proof"]]
+    proofs.each do |proof|
+      next add("vc-data-integrity", nil, [violation("proof is not a JSON object")]) unless proof.is_a?(Hash)
+      if proof["type"] != "DataIntegrityProof" || !CRYPTOSUITES.include?(proof["cryptosuite"])
+        next @unsupported << [proof["type"], proof["cryptosuite"]].compact.join(" ")
+      end
+
+      vm = proof["verificationMethod"]
+      vm = vm["id"] if vm.is_a?(Hash)
+      add("vc-data-integrity", vm.is_a?(String) ? vm.split("#").first : nil, verify_data_integrity(proof, vm))
+    end
+  end
+
+  def verify_data_integrity(proof, vm)
+    return [violation("proof has no verificationMethod")] unless vm.is_a?(String) && did?(vm)
+
+    key = @keys.key(vm, vm.split("#").first)
+    return [violation("verification method #{vm} is not an Ed25519 or P-256 key that can be resolved")] unless key
+
+    signature = decode_multibase(proof["proofValue"])
+    return [violation("proofValue is not a multibase base58btc value")] unless signature
+
+    out = []
+    unless self.class.eddsa_jcs_valid?(@passport, proof, key, signature)
+      out << violation("signature of the #{proof['cryptosuite']} proof by #{vm} does not verify: the passport content does not match the signed content")
+    end
+    if proof["proofPurpose"] != "assertionMethod"
+      out << warning("proofPurpose is #{proof['proofPurpose'].inspect}, expected \"assertionMethod\"")
+    end
+    out
+  end
+
+  # --- vc-jose-cose ---
+
+  def jose
+    return @unsupported << "JWS #{@jws.alg}" unless @jws.supported?
+
+    kid = @jws.header["kid"]
+    vm = kid.is_a?(String) && kid.start_with?("#") && did?(@jws.header["iss"]) ? "#{@jws.header['iss']}#{kid}" : kid
+    add("vc-jose-cose", vm.is_a?(String) ? vm.split("#").first : nil, verify_jws(vm))
+  end
+
+  def verify_jws(vm)
+    return [violation("JWS header has no kid with a DID URL, so the signing key cannot be determined")] unless vm.is_a?(String) && did?(vm)
+
+    key = @keys.key(vm, vm.split("#").first)
+    return [violation("verification method #{vm} is not an Ed25519 or P-256 key that can be resolved")] unless key
+    return [violation("JWS signature (#{@jws.alg}) by #{vm} does not verify")] unless @jws.valid_with?(key)
+    return [violation("JWS payload is not a JSON object")] unless @jws.payload.is_a?(Hash)
+    return [] if @jws_only || Jcs.dump(@jws.payload) == Jcs.dump(@passport.except("proof"))
+
+    [violation("JWS payload differs from the passport delivered as JSON")]
+  end
+
+  # --- did-oyd-log ---
 
   def oyd_log
     did = @passport["digitalProductPassportId"]
@@ -106,7 +194,7 @@ class ProofCheck
       return @notes << "the DID document of #{did} binds only the location of the passport, not its content (no payloadHash)"
     end
 
-    record(compare_payload(expected, service["serviceEndpoint"]))
+    add("did-oyd-log", did, compare_payload(expected, service["serviceEndpoint"]))
   rescue Didlint::Unavailable => e
     @notes << "did-oyd-log not checked (#{e.message})"
   end
@@ -138,72 +226,9 @@ class ProofCheck
     false
   end
 
-  def data_integrity(operator)
-    proofs = @passport["proof"].is_a?(Array) ? @passport["proof"] : [@passport["proof"]]
-    proofs.each do |proof|
-      next @messages << violation("proof is not a JSON object") unless proof.is_a?(Hash)
-      if proof["type"] != "DataIntegrityProof" || !CRYPTOSUITES.include?(proof["cryptosuite"])
-        next @unsupported << [proof["type"], proof["cryptosuite"]].compact.join(" ")
-      end
+  # --- helpers ---
 
-      record(verify_data_integrity(proof, operator))
-    end
-  end
-
-  def verify_data_integrity(proof, operator)
-    vm = proof["verificationMethod"]
-    vm = vm["id"] if vm.is_a?(Hash)
-    return [violation("proof has no verificationMethod")] unless vm.is_a?(String)
-
-    key, problem = operator_key(vm, operator, "proof")
-    return [problem] if problem
-
-    signature = decode_multibase(proof["proofValue"])
-    return [violation("proofValue is not a multibase base58btc value")] unless signature
-
-    out = []
-    unless self.class.eddsa_jcs_valid?(@passport, proof, key, signature)
-      out << violation("signature of the #{proof['cryptosuite']} proof by #{vm} does not verify: the passport content does not match the signed content")
-    end
-    if proof["proofPurpose"] != "assertionMethod"
-      out << warning("proofPurpose is #{proof['proofPurpose'].inspect}, expected \"assertionMethod\"")
-    end
-    out
-  end
-
-  def jose(operator)
-    return @unsupported << "JWS #{@jws.alg}" unless @jws.supported?
-
-    record(verify_jws(operator))
-  end
-
-  def verify_jws(operator)
-    kid = @jws.header["kid"]
-    return [violation("JWS header has no kid, so the signing key cannot be determined")] unless kid.is_a?(String) && kid.present?
-
-    vm = kid.start_with?("#") ? "#{operator}#{kid}" : kid
-    key, problem = operator_key(vm, operator, "JWS")
-    return [problem] if problem
-    return [violation("JWS signature (#{@jws.alg}) by #{vm} does not verify")] unless @jws.valid_with?(key)
-    return [violation("JWS payload is not a JSON object")] unless @jws.payload.is_a?(Hash)
-    return [] if @jws_only || Jcs.dump(@jws.payload) == Jcs.dump(@passport.except("proof"))
-
-    [violation("JWS payload differs from the passport delivered as JSON")]
-  end
-
-  def operator_key(vm, operator, what)
-    unless vm.split("#").first == operator
-      return [nil, violation("#{what} is signed with #{vm}, not with a key of the economic operator #{operator}")]
-    end
-
-    key = @keys.key(vm, operator)
-    key ? [key, nil] : [nil, violation("verification method #{vm} is not an Ed25519 or P-256 key in the DID document of #{operator}")]
-  end
-
-  def record(messages)
-    @messages.concat(messages)
-    @verified += 1 if messages.none? { |m| m[:severity] == "violation" }
-  end
+  def add(format, signer, messages) = @proofs << Proof.new(format: format, signer: signer, messages: messages)
 
   def decode_multibase(value)
     return unless value.is_a?(String) && value.start_with?("z")

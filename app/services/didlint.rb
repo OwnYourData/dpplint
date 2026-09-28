@@ -7,6 +7,7 @@ class Didlint
 
   def initialize(base = Rails.configuration.x.dpplint.didlint)
     @base = base.chomp("/")
+    @cache = {}
   end
 
   # {"valid" => true} or {"valid" => false, "error" => ..., "errors" => [...]}
@@ -28,7 +29,19 @@ class Didlint
 
   private
 
+  # Answers are cached per instance (one instance per validation).
   def get(path)
+    @cache[path] ||= begin
+      fetch(path)
+    rescue Unavailable => e
+      e
+    end
+    raise @cache[path] if @cache[path].is_a?(Unavailable)
+
+    @cache[path]
+  end
+
+  def fetch(path)
     uri = URI("#{@base}/#{path}")
     res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: 10, read_timeout: 60) do |http|
       http.request(Net::HTTP::Get.new(uri, "Accept" => "application/json"))

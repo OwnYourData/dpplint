@@ -61,12 +61,22 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_equal "no RelatedResource elements", criterion(result, "DPP-DAT-011")["reason"]
   end
 
-  test "passport signed by its economic operator passes the integrity check" do
+  test "passport signed by its economic operator passes the integrity and issuer checks" do
     passport = reference.merge("economicOperatorId" => did_key)
-    signed = sign(passport, verification_method: "#{did_key}##{key_multibase}")
-    assert_equal "passed", criterion(lint(signed), "DPP-SEC-002")["result"]
-    changed = signed.merge("dppStatus" => "Inactive")
-    assert_equal "failed", criterion(lint(changed), "DPP-SEC-002")["result"]
+    signed = lint(sign(passport, verification_method: "#{did_key}##{key_multibase}"))
+    assert_equal "passed", criterion(signed, "DPP-SEC-002")["result"]
+    assert_equal "passed", criterion(signed, "DPP-SEC-013")["result"]
+    changed = lint(sign(passport, verification_method: "#{did_key}##{key_multibase}").merge("dppStatus" => "Inactive"))
+    assert_equal "failed", criterion(changed, "DPP-SEC-002")["result"]
+    assert_equal "skipped", criterion(changed, "DPP-SEC-013")["result"]
+  end
+
+  test "passport signed by another key passes the integrity check with a warning on the issuer" do
+    other = OpenSSL::PKey.generate_key("ED25519")
+    passport = reference.merge("economicOperatorId" => did_key)
+    result = lint(sign(passport, verification_method: "#{did_key(other)}##{key_multibase(other)}", key: other))
+    assert_equal "passed", criterion(result, "DPP-SEC-002")["result"]
+    assert_equal "warning", criterion(result, "DPP-SEC-013")["result"]
   end
 
   test "passport posted as JWS is checked and its signature verified" do

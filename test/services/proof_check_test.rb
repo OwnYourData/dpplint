@@ -3,8 +3,8 @@ require "test_helper"
 class ProofCheckTest < ActiveSupport::TestCase
   include SigningHelper
 
-  CHECK = { "type" => "proof", "key_from" => "$.economicOperatorId",
-            "formats" => %w[vc-data-integrity vc-jose-cose did-oyd-log] }.freeze
+  CHECK = { "type" => "proof", "formats" => %w[vc-data-integrity vc-jose-cose did-oyd-log] }.freeze
+  ISSUER = CHECK.merge("key_from" => "$.economicOperatorId").freeze
   OYD = "did:oyd:zQmOperator".freeze
 
   # Returns a fixed DID document instead of asking didlint.
@@ -32,8 +32,8 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   def passport(operator = did_key) = { "uniqueProductIdentifier" => "https://dpp.example.org/01/1", "economicOperatorId" => operator, "dppStatus" => "Active" }
 
-  def outcome(passport, didlint: FakeDidlint.new, jws: nil, jws_only: false, raw: nil, resolver: FakeResolver.new({}))
-    ProofCheck.new(CHECK, passport, raw: raw, jws: jws, jws_only: jws_only, didlint: didlint, resolver: resolver).outcome
+  def outcome(passport, didlint: FakeDidlint.new, jws: nil, jws_only: false, raw: nil, resolver: FakeResolver.new({}), check: CHECK)
+    ProofCheck.new(check, passport, raw: raw, jws: jws, jws_only: jws_only, didlint: didlint, resolver: resolver).outcome
   end
 
   def oyd_document(key = signing_key)
@@ -56,9 +56,10 @@ class ProofCheckTest < ActiveSupport::TestCase
     assert_match(/no payloadHash for the passport DID/, result.skipped)
   end
 
-  test "proof by a did:key of the economic operator passes" do
+  test "proof by a did:key of the economic operator passes both checks" do
     signed = sign(passport, verification_method: "#{did_key}##{key_multibase}")
     assert_empty outcome(signed).messages
+    assert_empty outcome(signed, check: ISSUER).messages
   end
 
   test "changed passport fails" do
@@ -68,10 +69,19 @@ class ProofCheckTest < ActiveSupport::TestCase
     assert_match(/does not verify/, result.messages.first[:message])
   end
 
-  test "proof by another key than the economic operator fails" do
+  test "proof by another key verifies but gives a warning on the issuer" do
     other = OpenSSL::PKey.generate_key("ED25519")
     signed = sign(passport, verification_method: "#{did_key(other)}##{key_multibase(other)}", key: other)
-    assert_match(/not with a key of the economic operator/, outcome(signed).messages.first[:message])
+    assert_empty outcome(signed).messages
+    result = outcome(signed, check: ISSUER)
+    assert_equal ["warning"], result.messages.map { |m| m[:severity] }
+    assert_match(/not by the economic operator .* authorised representative cannot be recognised automatically/, result.messages.first[:message])
+  end
+
+  test "issuer check is skipped without a verified proof" do
+    assert_match(/no verified integrity proof/, outcome(passport, check: ISSUER).skipped)
+    signed = sign(passport, verification_method: "#{did_key}##{key_multibase}").merge("dppStatus" => "Inactive")
+    assert_match(/no verified integrity proof/, outcome(signed, check: ISSUER).skipped)
   end
 
   test "key from the resolved DID document of the economic operator" do
@@ -102,9 +112,10 @@ class ProofCheckTest < ActiveSupport::TestCase
     assert_match(/not verified in this version/, outcome(signed).skipped)
   end
 
-  test "economic operator that is not a DID is skipped" do
+  test "economic operator that is not a DID skips only the issuer check" do
     signed = sign(passport("urn:example:operator"), verification_method: "#{did_key}##{key_multibase}")
-    assert_match(/not a DID/, outcome(signed).skipped)
+    assert_empty outcome(signed).messages
+    assert_match(/not a DID/, outcome(signed, check: ISSUER).skipped)
   end
 
   test "unreachable didlint is passed on" do
@@ -120,7 +131,7 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "JWS signed with ES256 and a key from the DID document passes" do
     ec = OpenSSL::PKey::EC.generate("prime256v1")
     doc = { "id" => OYD, "verificationMethod" => [{ "id" => "#key-p256", "type" => "Multikey", "publicKeyMultibase" => key_multibase(ec) }] }
-    jws = Jws.parse(sign_jws(passport(OYD), kid: "#key-p256", key: ec))
+    jws = Jws.parse(sign_jws(passport(OYD), kid: "#key-p256", key: ec, iss: OYD))
     assert_empty outcome(jws.payload, jws: jws, jws_only: true, didlint: FakeDidlint.new(doc)).messages
   end
 
@@ -205,6 +216,13 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "unreachable serviceEndpoint still passes when the delivered bytes match" do
     assert_empty oyd_outcome(raw: attested_bytes, endpoint_body: nil).messages
     assert_match(/cannot be retrieved/, oyd_outcome(raw: nil, endpoint_body: nil).messages.first[:message])
+  end
+
+  test "content attested by the passport DID gives a warning on the issuer" do
+    result = outcome(attested_passport, raw: attested_bytes, check: ISSUER,
+                                        didlint: FakeDidlint.new(docs: { PASSPORT_DID => passport_did_document }),
+                                        resolver: FakeResolver.new(ENDPOINT => attested_bytes))
+    assert_match(/attested with the key of the passport DID #{PASSPORT_DID}, which is not linked/, result.messages.first[:message])
   end
 
   test "did-oyd-log without didlint is skipped" do
