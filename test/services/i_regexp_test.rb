@@ -22,10 +22,17 @@ class IRegexpTest < ActiveSupport::TestCase
   end
 
   test "^ or $ outside a character class makes the pattern unusable (dpp-criteria 4b17bb8)" do
-    ["^ab.*", ".*bc$", "^[Bb]atter", "59040|PCDS$", "(^a)", "a\\^b"].each do |pattern|
-      assert_match(/\Acontains (\^|\$|\\\^) outside a character class/, IRegexp.problem(pattern), pattern)
+    ["^ab.*", ".*bc$", "^[Bb]atter", "59040|PCDS$", "(^a)"].each do |pattern|
+      assert_match(/\Acontains (\^|\$) outside a character class/, IRegexp.problem(pattern), pattern)
       refute IRegexp.search?(pattern, pattern.delete("^$\\")), pattern
     end
+  end
+
+  test "an escaped \\^ is a literal ^, an escaped \\$ is not I-Regexp (dpp-criteria issue #7)" do
+    assert_nil IRegexp.problem("a\\^b")
+    assert IRegexp.match?("a\\^b", "a^b")
+    refute IRegexp.search?("a\\^b", "ab")
+    assert_match(/not an I-Regexp escape/, IRegexp.problem("a\\$"))
   end
 
   test "^ and $ inside a character class are allowed" do
