@@ -72,12 +72,22 @@ components:
             contentType: { type: string }
         summary:
           type: object
+          description: Only criteria with status active count. passed and warning count as passed, skipped is not counted.
           properties:
             text: { type: string, example: "7 of 7 automated checks passed" }
             passed: { type: integer }
             failed: { type: integer }
             warnings: { type: integer }
             skipped: { type: integer }
+            proposed_not_counted:
+              type: object
+              description: The same figures for criteria with status proposed, which are not counted.
+              properties:
+                text: { type: string }
+                passed: { type: integer }
+                failed: { type: integer }
+                warnings: { type: integer }
+                skipped: { type: integer }
         criteria:
           type: array
           items:
@@ -87,6 +97,8 @@ components:
               title: { type: string }
               level: { type: string, enum: [MUST, SHOULD, MAY] }
               result: { type: string, enum: [passed, warning, failed, skipped] }
+              status: { type: string, enum: [proposed, active] }
+              counted: { type: boolean, description: true if the criterion counts in summary.text (status active) }
               reason: { type: string }
               messages:
                 type: array
