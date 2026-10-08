@@ -24,19 +24,14 @@ class PassportLinter
     @jws = jws
     @jws_only = jws_only
     reports = {}
-    criteria = @catalogue.passport_criteria.map { |c| evaluate(c, passport, reports) }
-    counted = criteria.select { |c| %w[passed warning failed].include?(c[:result]) }
-    passed = counted.count { |c| c[:result] != "failed" }
+    criteria = @catalogue.passport_criteria.map do |c|
+      evaluate(c, passport, reports).merge(status: c["status"], counted: c["status"] == "active")
+    end
+    active, proposed = criteria.partition { |c| c[:counted] }
     {
       productId: product_id || passport&.dig("uniqueProductIdentifier"),
       retrieval: retrieval,
-      summary: {
-        text: "#{passed} of #{counted.size} automated checks passed",
-        passed: passed,
-        failed: counted.size - passed,
-        warnings: criteria.count { |c| c[:result] == "warning" },
-        skipped: criteria.count { |c| c[:result] == "skipped" }
-      },
+      summary: summary(active).merge(proposed_not_counted: summary(proposed.select { |c| c[:status] == "proposed" })),
       criteria: criteria,
       notice: "Results of automated checks only. They are no certification and establish no presumption of conformity.",
       "dpp-criteria": Rails.configuration.x.dpplint.criteria_ref
@@ -44,6 +39,21 @@ class PassportLinter
   end
 
   private
+
+  # Only criteria with status active count in "N of M" (CRITERIA-FORMAT.md,
+  # "Results"); proposed criteria are summarised separately and not counted.
+  # passed and warning count as passed, skipped is not counted.
+  def summary(criteria)
+    counted = criteria.select { |c| %w[passed warning failed].include?(c[:result]) }
+    passed = counted.count { |c| c[:result] != "failed" }
+    {
+      text: "#{passed} of #{counted.size} automated checks passed",
+      passed: passed,
+      failed: counted.size - passed,
+      warnings: criteria.count { |c| c[:result] == "warning" },
+      skipped: criteria.count { |c| c[:result] == "skipped" }
+    }
+  end
 
   def evaluate(criterion, passport, reports)
     base = { id: criterion["id"], title: criterion["title"], level: criterion["level"] }

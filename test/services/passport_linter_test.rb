@@ -27,7 +27,7 @@ class PassportLinterTest < ActiveSupport::TestCase
                              "expect" => { "status" => [200], "content_type" => "application/json" } }]
   }.freeze
 
-  def criterion(check = CHECK) = { "id" => "DPP-DAT-016", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated", "check" => check }
+  def criterion(check = CHECK) = { "id" => "DPP-DAT-016", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated", "status" => "active", "check" => check }
 
   def lint(responses, check = CHECK)
     PassportLinter.new(catalogue: FakeCatalogue.new([criterion(check)]), resolver: FakeResolver.new(responses))
@@ -36,6 +36,18 @@ class PassportLinterTest < ActiveSupport::TestCase
 
   HTML = [200, "text/html", "<html></html>", { "vary" => ["Accept"] }].freeze
   JSON_OK = [200, "application/json", '{"uniqueProductIdentifier":"x"}'].freeze
+
+  test "only active criteria count; proposed ones are summarised separately" do
+    proposed = criterion.merge("id" => "DPP-DAT-099", "status" => "proposed")
+    deprecated_like = criterion.merge("id" => "DPP-DAT-098", "status" => "deprecated")
+    report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion, proposed, deprecated_like]),
+                                resolver: FakeResolver.new("text/html" => HTML, "*/*" => JSON_OK))
+                           .run(passport: nil, product_id: UPI)
+    assert_equal "1 of 1 automated checks passed", report[:summary][:text]
+    assert_equal "1 of 1 automated checks passed", report[:summary][:proposed_not_counted][:text]
+    assert_equal [true, false, false], report[:criteria].map { |c| c[:counted] }
+    assert_equal %w[active proposed deprecated], report[:criteria].map { |c| c[:status] }
+  end
 
   test "no failing check passes" do
     report = lint("text/html" => HTML, "*/*" => JSON_OK)
@@ -73,7 +85,7 @@ class PassportLinterTest < ActiveSupport::TestCase
   end
 
   test "applies_if with a matches pattern that is not valid ECMA-262 skips the criterion with a reason" do
-    criterion = { "id" => "DPP-ID-099", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
+    criterion = { "id" => "DPP-ID-099", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated", "status" => "active",
                   "applies_if" => [{ "path" => "$.granularity", "matches" => "a**" }], "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
     report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
                            .run(passport: { "granularity" => "item" })
@@ -83,7 +95,7 @@ class PassportLinterTest < ActiveSupport::TestCase
   end
 
   test "applies_if with ^ in search() skips the criterion with a reason instead of evaluating it" do
-    criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
+    criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated", "status" => "active",
                   "applies_if" => [{ "path" => "$.contentSpecificationIds[?search(@, '^[Bb]atter')]", "exists" => false }],
                   "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
     report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
@@ -95,7 +107,7 @@ class PassportLinterTest < ActiveSupport::TestCase
   end
 
   test "applies_if with search() whose condition does not hold skips the criterion" do
-    criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated",
+    criterion = { "id" => "DPP-BAT-002", "title" => "t", "level" => "MUST", "target" => "passport", "method" => "automated", "status" => "active",
                   "applies_if" => [{ "path" => "$.contentSpecificationIds[?search(@, '[Bb]atter')]", "exists" => true }],
                   "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
     report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
