@@ -70,6 +70,7 @@ components:
             url: { type: string }
             status: { type: integer }
             contentType: { type: string }
+            httpVersion: { type: string, example: "2.0", description: HTTP version of the final response }
         summary:
           type: object
           description: Only criteria with status active count. passed and warning count as passed, skipped is not counted.

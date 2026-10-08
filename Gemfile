@@ -6,6 +6,7 @@ gem "rack-cors"
 gem "rswag-api"
 gem "rswag-ui"
 gem "ostruct"
+gem "httpx", "~> 1.8"
 
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
