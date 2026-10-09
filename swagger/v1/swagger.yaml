@@ -97,6 +97,7 @@ components:
               id: { type: string, example: DPP-DAT-014 }
               title: { type: string }
               level: { type: string, enum: [MUST, SHOULD, MAY] }
+              description_url: { type: string, format: uri, description: readable description of the criterion in criteria/README.md of the dpp-criteria commit used; absent if that commit has none }
               result: { type: string, enum: [passed, warning, failed, skipped] }
               status: { type: string, enum: [proposed, active] }
               counted: { type: boolean, description: true if the criterion counts in summary.text (status active) }

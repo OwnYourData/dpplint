@@ -57,6 +57,8 @@ class PassportLinter
 
   def evaluate(criterion, passport, reports)
     base = { id: criterion["id"], title: criterion["title"], level: criterion["level"] }
+    url = @catalogue.description_url(criterion["id"])
+    base[:description_url] = url if url
     check = criterion["check"] || {}
 
     return resolve(base, check) if check["type"] == "resolve"
