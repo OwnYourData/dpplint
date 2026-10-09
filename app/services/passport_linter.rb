@@ -10,6 +10,7 @@
 # check.type links check the related resources it links to.
 class PassportLinter
   SH = "http://www.w3.org/ns/shacl#".freeze
+  REASON_CODES = %w[not_applicable not_implemented no_evidence needs_credentials not_sent unreachable not_evaluated].freeze
 
   def initialize(catalogue: CriteriaCatalogue.new, web_cli: SoyaWebCli.new, resolver: HttpResolver.new, didlint: Didlint.new)
     @catalogue = catalogue
@@ -42,7 +43,8 @@ class PassportLinter
 
   # Only criteria with status active count in "N of M" (CRITERIA-FORMAT.md,
   # "Results"); proposed criteria are summarised separately and not counted.
-  # passed and warning count as passed, skipped is not counted.
+  # passed and warning count as passed, skipped is not counted;
+  # skipped_by_reason counts the skipped criteria per reason_code.
   def summary(criteria)
     counted = criteria.select { |c| %w[passed warning failed].include?(c[:result]) }
     passed = counted.count { |c| c[:result] != "failed" }
@@ -51,8 +53,16 @@ class PassportLinter
       passed: passed,
       failed: counted.size - passed,
       warnings: criteria.count { |c| c[:result] == "warning" },
-      skipped: criteria.count { |c| c[:result] == "skipped" }
+      skipped: criteria.count { |c| c[:result] == "skipped" },
+      skipped_by_reason: REASON_CODES.to_h { |code| [code, criteria.count { |c| c[:reason_code] == code }] }.reject { |_, n| n.zero? }
     }
+  end
+
+  # A skipped result with its reason and reason_code ("Results" in CRITERIA-FORMAT.md).
+  def skip(base, reason, code)
+    raise ArgumentError, "unknown reason_code #{code}" unless REASON_CODES.include?(code)
+
+    base.merge(result: "skipped", reason: reason, reason_code: code)
   end
 
   def evaluate(criterion, passport, reports)
@@ -63,23 +73,23 @@ class PassportLinter
 
     return resolve(base, check) if check["type"] == "resolve"
     unless %w[shacl did proof links].include?(check["type"])
-      return base.merge(result: "skipped", reason: "check type #{check['type']} is not implemented in this version")
+      return skip(base, "check type #{check['type']} is not implemented in this version", "not_evaluated")
     end
-    return base.merge(result: "skipped", reason: "passport could not be retrieved") if passport.nil?
+    return skip(base, "passport could not be retrieved", "not_evaluated") if passport.nil?
     if (problem = AppliesIf.problem(criterion["applies_if"]))
-      return base.merge(result: "skipped", reason: problem)
+      return skip(base, problem, "not_evaluated")
     end
     if criterion["applies_if"] && !AppliesIf.holds?(criterion["applies_if"], passport)
-      return base.merge(result: "skipped", reason: "condition not met")
+      return skip(base, "condition not met", "not_applicable")
     end
     return did(base, check, passport) if check["type"] == "did"
     return proof(base, check, passport) if check["type"] == "proof"
     return links(base, check, passport) if check["type"] == "links"
 
-    return base.merge(result: "skipped", reason: "no shapes available for #{check['shapes_select']}") unless check["structure"]
+    return skip(base, "no shapes available for #{check['shapes_select']}", "not_evaluated") unless check["structure"]
 
     report = (reports[check["structure"]] ||= validate(check["structure"], passport))
-    return base.merge(result: "skipped", reason: report[:error]) if report[:error]
+    return skip(base, report[:error], "not_evaluated") if report[:error]
 
     own = report[:results].select { |r| r[:message].start_with?("[#{criterion['id']}]") }
     messages = own.map { |r| { severity: r[:severity], message: r[:message].delete_prefix("[#{criterion['id']}]").strip } }
@@ -87,15 +97,15 @@ class PassportLinter
   end
 
   def resolve(base, check)
-    return base.merge(result: "skipped", reason: "rated by dpp-validator from its daily runs") if check["history"]
-    return base.merge(result: "skipped", reason: "needs a product identifier") if @product_id.blank?
+    return skip(base, "rated by dpp-validator from its daily runs", "not_evaluated") if check["history"]
+    return skip(base, "needs a product identifier", "not_evaluated") if @product_id.blank?
 
     resolve_check = ResolveCheck.new(check, @product_id, @resolver)
     if (keys = resolve_check.unsupported).any?
-      return base.merge(result: "skipped", reason: "expect #{keys.join(', ')} is not evaluated for check type resolve in this version")
+      return skip(base, "expect #{keys.join(', ')} is not evaluated for check type resolve in this version", "not_evaluated")
     end
     if (problem = resolve_check.pattern_problem)
-      return base.merge(result: "skipped", reason: problem)
+      return skip(base, problem, "not_evaluated")
     end
 
     messages = resolve_check.messages
@@ -104,26 +114,26 @@ class PassportLinter
 
   def did(base, check, passport)
     did_check = DidCheck.new(check, passport, didlint: @didlint, resolver: @resolver)
-    return base.merge(result: "skipped", reason: "no DID in #{check['paths'].join(', ')}") if did_check.dids.empty?
+    return skip(base, "no DID in #{check['paths'].join(', ')}", "not_applicable") if did_check.dids.empty?
 
     messages = did_check.messages
     base.merge(result: result_for(messages), messages: messages)
   rescue Didlint::Unavailable => e
-    base.merge(result: "skipped", reason: e.message)
+    skip(base, e.message, "not_evaluated")
   end
 
   def proof(base, check, passport)
     outcome = ProofCheck.new(check, passport, raw: @raw, jws: @jws, jws_only: @jws_only, didlint: @didlint, resolver: @resolver).outcome
-    return base.merge(result: "skipped", reason: outcome.skipped) if outcome.skipped
+    return skip(base, outcome.skipped, outcome.code) if outcome.skipped
 
     base.merge(result: result_for(outcome.messages), messages: outcome.messages)
   rescue Didlint::Unavailable => e
-    base.merge(result: "skipped", reason: e.message)
+    skip(base, e.message, "not_evaluated")
   end
 
   def links(base, check, passport)
     links_check = LinksCheck.new(check, passport, resolver: @resolver)
-    return base.merge(result: "skipped", reason: "no #{check['element_type']} elements") if links_check.resources.empty?
+    return skip(base, "no #{check['element_type']} elements", "not_applicable") if links_check.resources.empty?
 
     messages = links_check.messages
     base.merge(result: result_for(messages), messages: messages)

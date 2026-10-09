@@ -88,6 +88,7 @@ class PassportLinterTest < ActiveSupport::TestCase
     result = lint({}, check)[:criteria].first
     assert_equal "skipped", result[:result]
     assert_equal "expect json is not evaluated for check type resolve in this version", result[:reason]
+    assert_equal "not_evaluated", result[:reason_code]
   end
 
   test "applies_if with a matches pattern that is not valid ECMA-262 skips the criterion with a reason" do
@@ -118,7 +119,8 @@ class PassportLinterTest < ActiveSupport::TestCase
                   "check" => { "type" => "did", "paths" => ["$.facilityId"] } }
     report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion]), resolver: FakeResolver.new({}))
                            .run(passport: { "contentSpecificationIds" => ["BATTERY"] })
-    assert_equal({ result: "skipped", reason: "condition not met" }, report[:criteria].first.slice(:result, :reason))
+    assert_equal({ result: "skipped", reason: "condition not met", reason_code: "not_applicable" },
+                 report[:criteria].first.slice(:result, :reason, :reason_code))
   end
 
   test "a pattern that is not valid ECMA-262 skips the criterion with a reason, without a request" do

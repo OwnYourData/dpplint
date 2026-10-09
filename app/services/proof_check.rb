@@ -22,9 +22,12 @@ require "openssl"
 #   is made with the key of the passport DID.
 # Passports without a proof, and proofs in formats this version does not
 # verify, are skipped. Keys come from did:key directly or from the DID
-# document resolved by didlint.
+# document resolved by didlint. A skip carries a reason_code ("Results" in
+# CRITERIA-FORMAT.md): no_evidence if the passport offers nothing to verify,
+# not_evaluated if a proof or DID could not be checked by this version,
+# not_applicable if key_from is not a DID.
 class ProofCheck
-  Outcome = Struct.new(:skipped, :messages, keyword_init: true)
+  Outcome = Struct.new(:skipped, :code, :messages, keyword_init: true)
   # One proof found in the passport: format, DID of the signer, and the
   # messages of its verification (none with severity violation = verified).
   Proof = Struct.new(:format, :signer, :messages, keyword_init: true) do
@@ -93,10 +96,14 @@ class ProofCheck
 
   def issuer_outcome
     verified = @proofs.select(&:verified?)
-    return skip("no verified integrity proof (#{skip_reason.presence || 'see the integrity check'})") if verified.empty?
+    if verified.empty?
+      return skip("no verified integrity proof (#{skip_reason.presence || 'see the integrity check'})", @proofs.empty? ? skip_code : "no_evidence")
+    end
 
     operator = @passport[@check["key_from"].delete_prefix("$.")]
-    return skip("#{@check['key_from']} is not a DID, so the issuer of the proof cannot be compared with it") unless did?(operator)
+    unless did?(operator)
+      return skip("#{@check['key_from']} is not a DID, so the issuer of the proof cannot be compared with it", "not_applicable")
+    end
     return Outcome.new(messages: []) if verified.any? { |p| p.signer == operator }
 
     Outcome.new(messages: verified.map { |p| warning(issuer_message(p, operator)) })
@@ -239,7 +246,15 @@ class ProofCheck
   end
 
   def did?(value) = value.is_a?(String) && value.match?(/\Adid:[a-z0-9]+:.+/)
-  def skip(reason) = Outcome.new(skipped: reason)
+  def skip(reason, code = skip_code) = Outcome.new(skipped: reason, code: code)
+
+  # not_evaluated if a proof format is not verified in this version or a DID
+  # or did-oyd-log could not be checked; otherwise no_evidence (no proof, or
+  # a DID document without payloadHash).
+  def skip_code
+    unchecked = @notes.reject { |n| n.include?("binds only the location of the passport") }
+    @unsupported.any? || unchecked.any? ? "not_evaluated" : "no_evidence"
+  end
   def violation(message) = { severity: "violation", message: message }
   def warning(message) = { severity: "warning", message: message }
 end

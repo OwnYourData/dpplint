@@ -80,6 +80,7 @@ components:
             failed: { type: integer }
             warnings: { type: integer }
             skipped: { type: integer }
+            skipped_by_reason: { type: object, additionalProperties: { type: integer }, description: number of skipped criteria per reason_code (only codes that occur) }
             proposed_not_counted:
               type: object
               description: The same figures for criteria with status proposed, which are not counted.
@@ -89,6 +90,7 @@ components:
                 failed: { type: integer }
                 warnings: { type: integer }
                 skipped: { type: integer }
+                skipped_by_reason: { type: object, additionalProperties: { type: integer } }
         criteria:
           type: array
           items:
@@ -101,7 +103,8 @@ components:
               result: { type: string, enum: [passed, warning, failed, skipped] }
               status: { type: string, enum: [proposed, active] }
               counted: { type: boolean, description: true if the criterion counts in summary.text (status active) }
-              reason: { type: string }
+              reason: { type: string, description: why the criterion was skipped }
+              reason_code: { type: string, enum: [not_applicable, not_implemented, no_evidence, needs_credentials, not_sent, unreachable, not_evaluated], description: "category of the skip, see Results in CRITERIA-FORMAT.md of dpp-criteria; only for result skipped" }
               messages:
                 type: array
                 items:

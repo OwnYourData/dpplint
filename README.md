@@ -82,6 +82,11 @@ and do not establish a presumption of conformity.
   passport for the required attributes and send a HEAD request to its URL
   (at most 20 URLs per passport). A URL that does not answer gives a warning.
 - Criteria whose condition does not hold are reported as `skipped`.
+- Every `skipped` criterion carries a `reason` and a `reason_code`
+  (`not_applicable`, `no_evidence`, `not_evaluated`, … as defined under
+  "Results" in CRITERIA-FORMAT.md of dpp-criteria); the summary counts them per
+  code in `skipped_by_reason`. A passport without any integrity proof gives
+  `no_evidence` for DPP-SEC-002.
 - dpplint only contacts public addresses: URLs whose host resolves to loopback,
   private or link-local ranges are not retrieved.
   `DPPLINT_ALLOW_PRIVATE_NETWORKS=1` lifts this for local development.
