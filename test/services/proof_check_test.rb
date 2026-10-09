@@ -54,6 +54,7 @@ class ProofCheckTest < ActiveSupport::TestCase
     result = outcome(passport)
     assert_match(/carries no integrity proof/, result.skipped)
     assert_match(/no payloadHash for the passport DID/, result.skipped)
+    assert_equal "no_evidence", result.code
   end
 
   test "proof by a did:key of the economic operator passes both checks" do
@@ -110,12 +111,14 @@ class ProofCheckTest < ActiveSupport::TestCase
     signed = sign(passport, verification_method: "#{did_key}##{key_multibase}")
     signed["proof"]["cryptosuite"] = "ecdsa-rdfc-2019"
     assert_match(/not verified in this version/, outcome(signed).skipped)
+    assert_equal "not_evaluated", outcome(signed).code
   end
 
   test "economic operator that is not a DID skips only the issuer check" do
     signed = sign(passport("urn:example:operator"), verification_method: "#{did_key}##{key_multibase}")
     assert_empty outcome(signed).messages
     assert_match(/not a DID/, outcome(signed, check: ISSUER).skipped)
+    assert_equal "not_applicable", outcome(signed, check: ISSUER).code
   end
 
   test "unreachable didlint is passed on" do
@@ -211,6 +214,7 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "DID document without payloadHash is skipped" do
     result = oyd_outcome(raw: attested_bytes, document: passport_did_document(payload_hash: nil))
     assert_match(/binds only the location of the passport, not its content/, result.skipped)
+    assert_equal "no_evidence", result.code
   end
 
   test "unreachable serviceEndpoint still passes when the delivered bytes match" do
@@ -228,5 +232,6 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "did-oyd-log without didlint is skipped" do
     result = outcome(attested_passport, raw: attested_bytes, didlint: FakeDidlint.new(unavailable: true))
     assert_match(/did-oyd-log not checked \(didlint not reachable/, result.skipped)
+    assert_equal "not_evaluated", result.code
   end
 end

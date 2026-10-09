@@ -66,6 +66,13 @@
   const statusEl = document.getElementById("status");
   const resultEl = document.getElementById("result");
   const order = { failed: 0, warning: 1, passed: 2, skipped: 3 };
+  const reasonLabels = { not_applicable: "not applicable", not_implemented: "not implemented", no_evidence: "no evidence",
+                         needs_credentials: "needs credentials", not_sent: "not sent", unreachable: "unreachable", not_evaluated: "not evaluated" };
+  const reasonLabel = (code) => reasonLabels[code] || code;
+  const skippedText = (s) => {
+    const parts = Object.entries(s.skipped_by_reason || {}).map(([code, n]) => `${n} ${reasonLabel(code)}`);
+    return `${s.skipped} skipped${parts.length ? ": " + parts.join(", ") : ""}`;
+  };
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -76,11 +83,11 @@
       const proposed = c.counted === false ? ` <span class="notice">(${esc(c.status)}, not counted)</span>` : "";
       const id = c.description_url ? `<a href="${esc(c.description_url)}" target="_blank" rel="noopener" title="Description of the criterion">${esc(c.id)}</a>` : esc(c.id);
       return `<tr><td class="id">${id}</td><td>${esc(c.title)}${proposed}${notes ? `<ul class="msg">${notes}</ul>` : ""}</td>
-              <td>${esc(c.level)}</td><td><span class="badge ${esc(c.result)}">${esc(c.result)}</span></td></tr>`;
+              <td>${esc(c.level)}</td><td><span class="badge ${esc(c.result)}">${esc(c.result)}</span>${c.reason_code ? `<div class="notice">${esc(reasonLabel(c.reason_code))}</div>` : ""}</td></tr>`;
     }).join("");
     resultEl.innerHTML = `
       <div class="summary"><strong>${esc(d.summary.text)}</strong>
-        (${d.summary.failed} failed, ${d.summary.warnings} with warnings, ${d.summary.skipped} not applicable or not checked)
+        (${d.summary.failed} failed, ${d.summary.warnings} with warnings, ${esc(skippedText(d.summary))})
         ${d.summary.proposed_not_counted ? `<div class="notice">Proposed criteria, not counted: ${esc(d.summary.proposed_not_counted.text)}</div>` : ""}
         <div class="notice" style="overflow-wrap:anywhere">Retrieved: ${esc(retrieval.url)} · HTTP ${esc(retrieval.status)} · ${esc(retrieval.contentType)}${retrieval.error ? " · " + esc(retrieval.error) : ""}</div>
         <div class="notice">${esc(d.notice)}</div></div>
