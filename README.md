@@ -68,9 +68,11 @@ and do not establish a presumption of conformity.
     document, resolved by didlint in the current version, carries in the
     service of type `DigitalProductPassport` a `payloadHash` (SHA-256
     multihash, base58btc) of the passport bytes delivered by that service's
-    `serviceEndpoint`. dpplint compares it with the bytes from the
-    `serviceEndpoint` and with the bytes delivered for the product identifier
-    (with `POST`: with the content sent).
+    `serviceEndpoint` in the full representation. dpplint requests the
+    `serviceEndpoint` with `representation=full` (EN 18222 8.1; without it an
+    EN 18222 service answers in the compressed representation) and compares
+    the hash with these bytes and with the bytes delivered for the product
+    identifier (with `POST`: with the content sent).
 
   With `key_from` (DPP-SEC-013) at least one verified proof has to be issued
   with a key of the DID at that path (the economic operator); otherwise the
