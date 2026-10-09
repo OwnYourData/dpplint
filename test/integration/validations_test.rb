@@ -59,7 +59,11 @@ class ValidationsTest < ActionDispatch::IntegrationTest
   test "passport without proof or related resources skips both checks" do
     result = lint(reference)
     assert_match(/carries no integrity proof/, criterion(result, "DPP-SEC-002")["reason"])
-    assert_equal "no_evidence", criterion(result, "DPP-SEC-002")["reason_code"]
+    # didlint is not reachable in the tests, so did-oyd-log of the passport DID
+    # cannot be checked: not_evaluated. With a reachable didlint and no
+    # payloadHash the code is no_evidence (unit tests of ProofCheck).
+    assert_match(/did-oyd-log not checked/, criterion(result, "DPP-SEC-002")["reason"])
+    assert_equal "not_evaluated", criterion(result, "DPP-SEC-002")["reason_code"]
     assert_equal "no RelatedResource elements", criterion(result, "DPP-DAT-011")["reason"]
     assert_equal "not_applicable", criterion(result, "DPP-DAT-011")["reason_code"]
   end
