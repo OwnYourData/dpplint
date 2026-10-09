@@ -74,7 +74,8 @@
     const rows = [...d.criteria].sort((a, b) => order[a.result] - order[b.result] || a.id.localeCompare(b.id)).map((c) => {
       const notes = (c.messages || []).map((m) => `<li>${esc(m.message)}</li>`).join("") + (c.reason ? `<li>${esc(c.reason)}</li>` : "");
       const proposed = c.counted === false ? ` <span class="notice">(${esc(c.status)}, not counted)</span>` : "";
-      return `<tr><td class="id">${esc(c.id)}</td><td>${esc(c.title)}${proposed}${notes ? `<ul class="msg">${notes}</ul>` : ""}</td>
+      const id = c.description_url ? `<a href="${esc(c.description_url)}" target="_blank" rel="noopener" title="Description of the criterion">${esc(c.id)}</a>` : esc(c.id);
+      return `<tr><td class="id">${id}</td><td>${esc(c.title)}${proposed}${notes ? `<ul class="msg">${notes}</ul>` : ""}</td>
               <td>${esc(c.level)}</td><td><span class="badge ${esc(c.result)}">${esc(c.result)}</span></td></tr>`;
     }).join("");
     resultEl.innerHTML = `

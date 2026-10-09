@@ -8,6 +8,7 @@ class PassportLinterTest < ActiveSupport::TestCase
   class FakeCatalogue
     def initialize(criteria) = @criteria = criteria
     def passport_criteria = @criteria
+    def description_url(id) = "https://example.org/criteria/README.md##{id.downcase}"
   end
 
   class FakeResolver
@@ -36,6 +37,11 @@ class PassportLinterTest < ActiveSupport::TestCase
 
   HTML = [200, "text/html", "<html></html>", { "vary" => ["Accept"] }].freeze
   JSON_OK = [200, "application/json", '{"uniqueProductIdentifier":"x"}'].freeze
+
+  test "each criterion links to its description" do
+    result = lint({ "text/html" => HTML, "*/*" => JSON_OK })[:criteria].first
+    assert_equal "https://example.org/criteria/README.md#dpp-dat-016", result[:description_url]
+  end
 
   test "only active criteria count; proposed ones are summarised separately" do
     proposed = criterion.merge("id" => "DPP-DAT-099", "status" => "proposed")
