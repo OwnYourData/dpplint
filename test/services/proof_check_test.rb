@@ -164,6 +164,8 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   PASSPORT_DID = "did:oyd:zQmPassport".freeze
   ENDPOINT = "https://custodian.example.org/dpp/v1/dppsByProductId/1".freeze
+  # The serviceEndpoint is requested in the full representation (EN 18222 8.1).
+  FULL_ENDPOINT = "#{ENDPOINT}?representation=full".freeze
 
   def attested_passport = passport("did:oyd:zQmOperator").merge("digitalProductPassportId" => PASSPORT_DID)
   def attested_bytes = JSON.generate(attested_passport)
@@ -176,11 +178,24 @@ class ProofCheckTest < ActiveSupport::TestCase
 
   def oyd_outcome(raw:, passport: attested_passport, document: passport_did_document, endpoint_body: attested_bytes)
     outcome(passport, raw: raw, didlint: FakeDidlint.new(docs: { PASSPORT_DID => document }),
-                      resolver: FakeResolver.new(ENDPOINT => endpoint_body))
+                      resolver: FakeResolver.new(FULL_ENDPOINT => endpoint_body))
   end
 
   # Bytes of https://dpp.oydapp.eu/01/09520123456788/21/000002 as delivered on 27.09.2026,
   # and the payloadHash in the DID document of its digitalProductPassportId.
+  test "the serviceEndpoint is requested with representation=full" do
+    assert_equal "https://c.example/dpp/v1/dppsByProductId/1?representation=full",
+                 ProofCheck.full_representation("https://c.example/dpp/v1/dppsByProductId/1")
+    assert_equal "https://c.example/p?a=1&representation=full", ProofCheck.full_representation("https://c.example/p?a=1")
+    assert_equal "https://c.example/p?representation=full", ProofCheck.full_representation("https://c.example/p?representation=compressed")
+  end
+
+  test "an endpoint that answers only without representation=full is not the attested source" do
+    result = outcome(attested_passport, raw: nil, didlint: FakeDidlint.new(docs: { PASSPORT_DID => passport_did_document }),
+                                        resolver: FakeResolver.new(ENDPOINT => attested_bytes))
+    assert_match(/cannot be retrieved/, result.messages.first[:message])
+  end
+
   test "multihash matches the payloadHash of the example passport 000002" do
     assert_equal "zQmRdgMsgR8RRaQEadHFSJ2Zw4cReM6MpeZWJJTEjRzbSfw", ProofCheck.multihash(file_fixture("passport-000002.json").binread)
   end
@@ -225,7 +240,7 @@ class ProofCheckTest < ActiveSupport::TestCase
   test "content attested by the passport DID gives a warning on the issuer" do
     result = outcome(attested_passport, raw: attested_bytes, check: ISSUER,
                                         didlint: FakeDidlint.new(docs: { PASSPORT_DID => passport_did_document }),
-                                        resolver: FakeResolver.new(ENDPOINT => attested_bytes))
+                                        resolver: FakeResolver.new(FULL_ENDPOINT => attested_bytes))
     assert_match(/attested with the key of the passport DID #{PASSPORT_DID}, which is not linked/, result.messages.first[:message])
   end
 

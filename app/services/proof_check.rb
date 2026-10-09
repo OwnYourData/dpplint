@@ -17,9 +17,12 @@ require "openssl"
 # - did-oyd-log: the DID document of digitalProductPassportId (did:oyd,
 #   resolved by didlint, current version) carries in its service of type
 #   DigitalProductPassport a payloadHash: SHA-256 multihash (base58btc) of the
-#   passport bytes as delivered by that service's serviceEndpoint. The bytes
-#   delivered for the product identifier have to be the same. The attestation
-#   is made with the key of the passport DID.
+#   passport bytes as delivered by that service's serviceEndpoint in the full
+#   representation (the serviceEndpoint is requested with
+#   representation=full, EN 18222 8.1; without it an EN 18222 service answers
+#   in the compressed representation). The bytes delivered for the product
+#   identifier have to be the same. The attestation is made with the key of
+#   the passport DID.
 # Passports without a proof, and proofs in formats this version does not
 # verify, are skipped. Keys come from did:key directly or from the DID
 # document resolved by didlint. A skip carries a reason_code ("Results" in
@@ -58,6 +61,18 @@ class ProofCheck
 
   # SHA-256 multihash, base58btc with prefix z (zQm...).
   def self.multihash(bytes) = "z#{Base58.encode("\x12\x20".b + Digest::SHA256.digest(bytes.to_s.b))}"
+
+  # The serviceEndpoint with the query flag representation=full (EN 18222
+  # 8.1), added to an existing query; an existing representation parameter is
+  # replaced. Services that do not know the flag ignore it.
+  def self.full_representation(url)
+    uri = URI.parse(url)
+    params = URI.decode_www_form(uri.query.to_s).reject { |k, _| k == "representation" }
+    uri.query = URI.encode_www_form(params + [%w[representation full]])
+    uri.to_s
+  rescue URI::InvalidURIError
+    url
+  end
 
   # eddsa-jcs-2022: SHA-256 of the canonical proof options, followed by
   # SHA-256 of the canonical document without its proof, signed with Ed25519.
@@ -207,7 +222,7 @@ class ProofCheck
   end
 
   def compare_payload(expected, endpoint)
-    attested = endpoint.is_a?(String) ? @resolver.get(endpoint) : nil
+    attested = endpoint.is_a?(String) ? @resolver.get(self.class.full_representation(endpoint)) : nil
     unless attested&.success?
       problem = attested ? (attested.error || "HTTP #{attested.status}") : "no serviceEndpoint"
       return [] if @raw && self.class.multihash(@raw) == expected
