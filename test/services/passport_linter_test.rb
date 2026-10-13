@@ -55,6 +55,26 @@ class PassportLinterTest < ActiveSupport::TestCase
     assert_equal %w[active proposed deprecated], report[:criteria].map { |c| c[:status] }
   end
 
+  HTML_CHECK = { "type" => "html", "external_resources" => "forbidden" }.freeze
+
+  test "html criterion fails on an external script" do
+    page = [200, "text/html", '<html><head><script src="https://cdn.example.net/a.js"></script></head></html>']
+    result = lint({ "text/html" => page }, HTML_CHECK)[:criteria].first
+    assert_equal "failed", result[:result]
+    assert_match(/cdn\.example\.net/, result[:messages].first[:message])
+  end
+
+  test "html criterion without an HTML view is skipped with no_evidence" do
+    result = lint({ "text/html" => JSON_OK }, HTML_CHECK)[:criteria].first
+    assert_equal %w[skipped no_evidence], [result[:result], result[:reason_code]]
+  end
+
+  test "html criterion without a product identifier is skipped" do
+    report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion(HTML_CHECK)]), resolver: FakeResolver.new({}))
+                           .run(passport: { "a" => 1 }, product_id: nil)
+    assert_equal %w[skipped not_evaluated], [report[:criteria].first[:result], report[:criteria].first[:reason_code]]
+  end
+
   test "no failing check passes" do
     report = lint("text/html" => HTML, "*/*" => JSON_OK)
     assert_equal "passed", report[:criteria].first[:result]

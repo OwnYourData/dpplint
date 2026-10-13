@@ -83,6 +83,14 @@ and do not establish a presumption of conformity.
 - Criteria with `check.type: links` check every `RelatedResource` of the
   passport for the required attributes and send a HEAD request to its URL
   (at most 20 URLs per passport). A URL that does not answer gives a warning.
+- Criteria with `check.type: html` (DPP-SEC-014) request the product
+  identifier with `Accept: text/html` and list the URLs a browser loads without
+  user action while it displays the HTML view (scripts, style sheets, fonts,
+  images, frames, preloads, CSS `url()` and `@import`, meta refresh). With
+  `external_resources: forbidden` every such URL on another host than the
+  passport's fails the criterion. Without an HTML view the result is
+  `skipped` (`no_evidence`). Resources added by scripts at run time are not
+  seen.
 - Criteria whose condition does not hold are reported as `skipped`.
 - Every `skipped` criterion carries a `reason` and a `reason_code`
   (`not_applicable`, `no_evidence`, `not_evaluated`, … as defined under

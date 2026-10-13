@@ -7,7 +7,9 @@
 # therefore need one (GET /api/v1/validate/<product identifier>). Criteria with
 # check.type did hand the DIDs of the passport to didlint. Criteria with
 # check.type proof verify an integrity proof in the passport; criteria with
-# check.type links check the related resources it links to.
+# check.type links check the related resources it links to; criteria with
+# check.type html check the HTML view of the passport (needs a product
+# identifier, like resolve).
 class PassportLinter
   SH = "http://www.w3.org/ns/shacl#".freeze
   REASON_CODES = %w[not_applicable not_implemented no_evidence needs_credentials not_sent unreachable not_evaluated].freeze
@@ -72,6 +74,7 @@ class PassportLinter
     check = criterion["check"] || {}
 
     return resolve(base, check) if check["type"] == "resolve"
+    return html(base, check) if check["type"] == "html"
     unless %w[shacl did proof links].include?(check["type"])
       return skip(base, "check type #{check['type']} is not implemented in this version", "not_evaluated")
     end
@@ -110,6 +113,15 @@ class PassportLinter
 
     messages = resolve_check.messages
     base.merge(result: result_for(messages), messages: messages)
+  end
+
+  def html(base, check)
+    return skip(base, "needs a product identifier", "not_evaluated") if @product_id.blank?
+
+    outcome = HtmlCheck.new(check, @product_id, @resolver).outcome
+    return skip(base, outcome.skipped, outcome.code) if outcome.skipped
+
+    base.merge(result: result_for(outcome.messages), messages: outcome.messages)
   end
 
   def did(base, check, passport)
