@@ -6,8 +6,15 @@
   <title>dpplint – Digital Product Passport checks</title>
   <link rel="icon" href="/oyd-mark.svg" type="image/svg+xml">
   <style>
-    :root { --fg: #1d2330; --muted: #5b6475; --line: #d9dde5; --bg: #ffffff; --panel: #f5f7fa;
-            --pass: #1f7a3f; --warn: #9a6500; --fail: #b3261e; --skip: #6b7280; --accent: #2457a6; }
+    :root { color-scheme: light dark;
+            --fg: #1d2330; --muted: #5b6475; --line: #d9dde5; --field: #848c9a; --bg: #ffffff; --panel: #f5f7fa;
+            --pass: #1f7a3f; --warn: #9a6500; --fail: #b3261e; --skip: #6b7280; --accent: #2457a6;
+            --on-accent: #ffffff; --on-status: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e8eaed; --muted: #a0a4aa; --line: #3a3d42; --field: #757b83; --bg: #151618; --panel: #202226;
+              --pass: #6fcf8f; --warn: #e7b75f; --fail: #f28b82; --skip: #a0a4aa; --accent: #8ab4f8;
+              --on-accent: #151618; --on-status: #151618; }
+    }
     * { box-sizing: border-box; }
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
     .wrap { max-width: 960px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
@@ -17,8 +24,10 @@
     .brand .mark { width: 15px; height: auto; display: block; }
     p.lead { color: var(--muted); margin: 0 0 24px; }
     form { display: flex; gap: 8px; flex-wrap: wrap; }
-    input[type=url] { flex: 1 1 420px; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--line); border-radius: 6px; }
-    button { padding: 10px 18px; font-size: 1rem; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+    input[type=url] { flex: 1 1 420px; padding: 10px 12px; font-size: 1rem; color: var(--fg); background: var(--bg);
+                      border: 1px solid var(--field); border-radius: 6px; }
+    input[type=url]::placeholder { color: var(--muted); opacity: 1; }
+    button { padding: 10px 18px; font-size: 1rem; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); cursor: pointer; }
     button:disabled { opacity: .6; cursor: default; }
     .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
     a { color: var(--accent); }
@@ -32,7 +41,7 @@
     th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); }
     th { font-size: .85rem; color: var(--muted); font-weight: 600; }
     td.id { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 600; color: #fff; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--on-status); }
     .passed { background: var(--pass); } .warning { background: var(--warn); } .failed { background: var(--fail); } .skipped { background: var(--skip); }
     ul.msg { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: .9rem; }
     footer { margin-top: 56px; padding: 24px 0 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
