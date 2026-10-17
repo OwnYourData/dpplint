@@ -132,6 +132,12 @@ service, certificate (cert-manager, ClusterIssuer `letsencrypt-prod`) and ingres
 docker run --rm --platform linux/amd64 oydeu/dpplint test
 ```
 
+## Funding
+
+<!-- funding:begin -->
+The DPP Linter is part of [PACE-DPP](https://dpp-austria.at/) – Promoting and Accelerating a Digital Product Passport based Data-Service Ecosystem. This Lighthouse Project has been made possible by financial contributions from the Austrian Federal Ministry of Innovation, Mobility and Infrastructure ([BMIMI](https://www.bmimi.gv.at/en.html), formerly BMK), supported by the Austrian Research Promotion Agency (FFG) under grant number [917177](https://projekte.ffg.at/projekt/5128301), as well as from the German Federal Ministry of Research, Technology and Space (BMFTR, formerly BMWK), supported by the German Research Promotion Agency (DLR-PT).
+<!-- funding:end -->
+
 ## License
 
 Apache License 2.0 – see [LICENSE](LICENSE).

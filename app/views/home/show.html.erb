@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>dpplint – Digital Product Passport checks</title>
+  <link rel="icon" href="/oyd-mark.svg" type="image/svg+xml">
   <style>
     :root { --fg: #1d2330; --muted: #5b6475; --line: #d9dde5; --bg: #ffffff; --panel: #f5f7fa;
             --pass: #1f7a3f; --warn: #9a6500; --fail: #b3261e; --skip: #6b7280; --accent: #2457a6; }
@@ -11,6 +12,8 @@
     body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg); background: var(--bg); }
     main { max-width: 960px; margin: 0 auto; padding: 32px 16px 48px; }
     h1 { font-size: 1.8rem; margin: 0 0 4px; }
+    .brand { display: flex; align-items: center; gap: 9px; }
+    .brand .mark { width: 15px; height: auto; display: block; }
     p.lead { color: var(--muted); margin: 0 0 24px; }
     form { display: flex; gap: 8px; flex-wrap: wrap; }
     input[type=url] { flex: 1 1 420px; padding: 10px 12px; font-size: 1rem; border: 1px solid var(--line); border-radius: 6px; }
@@ -33,11 +36,12 @@
     ul.msg { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: .9rem; }
     footer { margin-top: 40px; color: var(--muted); font-size: .85rem; }
     footer a { color: var(--accent); }
+    footer .funding { margin-top: 12px; font-size: 13px; color: var(--muted); }
   </style>
 </head>
 <body>
 <main>
-  <h1>dpplint</h1>
+  <h1 class="brand"><img class="mark" src="/oyd-mark.svg" alt="" width="15" height="28">dpplint</h1>
   <p class="lead">Checks the digital product passport retrievable for a product identifier against the automated passport criteria of
     <a href="https://github.com/OwnYourData/dpp-criteria">dpp-criteria</a> (EN 18219, EN 18223 and related regulation).</p>
 
@@ -57,6 +61,7 @@
     <a href="/api-docs">API</a> ·
     <a href="https://github.com/OwnYourData/dpplint">Source</a> ·
     a service of <a href="https://www.ownyourdata.eu">OwnYourData</a>
+    <div class="funding"><%= raw FundingNotice.html %></div>
   </footer>
 </main>
 <script>
