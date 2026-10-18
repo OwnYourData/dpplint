@@ -30,7 +30,9 @@ and do not establish a presumption of conformity.
   parameters, case-insensitive; for `application/json` and `+json` types the
   body must be a single JSON object) and the header fields
   (`exists`, `equals`, `contains`, `matches`; field names case-insensitive,
-  several fields of one name combined with commas) only if both hold.
+  several fields of one name combined with commas) only if both hold. A media
+  type in `content_type_with_warning` satisfies the content type with a
+  warning instead of a failure.
   `matches` is an ECMA-262 regular expression without flags, searched
   anywhere in the value and case-sensitive (`^` and `$` anchor the whole
   value); a criterion with a pattern that is not valid ECMA-262, or that uses

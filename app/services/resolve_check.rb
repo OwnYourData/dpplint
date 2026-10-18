@@ -9,7 +9,10 @@
 # object, which belongs to the content type check. Following "Order of
 # evaluation within a request" in CRITERIA-FORMAT.md, the header fields
 # (`headers`, see HeaderAssertion) are evaluated only if status and content
-# type hold; otherwise they give no message of their own.
+# type hold; otherwise they give no message of their own. A media type listed
+# in `content_type_with_warning` satisfies `content_type` with a warning
+# instead of a violation (e.g. application/ld+json for a request for
+# application/json, DPP-DAT-003); the header fields are then evaluated as well.
 #
 # `further_requests` are sent after the first request to the same identifier,
 # each with its own `accept` and `expect`, and are evaluated independently of
@@ -17,7 +20,7 @@
 # request as a warning.
 class ResolveCheck
   # Parts of `expect` this version evaluates for check type resolve.
-  SUPPORTED_EXPECT = %w[status content_type headers].freeze
+  SUPPORTED_EXPECT = %w[status content_type content_type_with_warning headers].freeze
 
   def initialize(check, product_id, resolver)
     @check = check
@@ -61,12 +64,13 @@ class ResolveCheck
     label ? out.map { |m| m.merge(message: "#{label}: #{m[:message]}") } : out
   end
 
-  # status and content type first; header fields only if both hold.
+  # status and content type first; header fields only if both hold (a
+  # content type from content_type_with_warning holds, with a warning).
   def expected(res, expect)
     out = status_and_content_type(res, expect)
-    return out if out.any?
+    return out if out.any? { |m| m[:severity] == "violation" }
 
-    HeaderAssertion.messages(expect["headers"], res.headers)
+    out + HeaderAssertion.messages(expect["headers"], res.headers)
   end
 
   def status_and_content_type(res, expect)
@@ -76,12 +80,18 @@ class ResolveCheck
     end
     if (type = expect["content_type"])
       expected_type = media_type(type)
-      if res.media_type != expected_type
+      tolerated = Array(expect["content_type_with_warning"]).map { |t| media_type(t) }
+      if res.media_type != expected_type && !tolerated.include?(res.media_type)
         out << violation("Content-Type is #{res.content_type.presence || 'missing'}, expected #{type}")
-      elsif json_media_type?(expected_type)
-        json = parse_json(res.body)
-        if json == :invalid then out << violation("response is not valid JSON")
-        elsif !json.is_a?(Hash) then out << violation("response is not a single JSON object")
+      else
+        if json_media_type?(res.media_type)
+          json = parse_json(res.body)
+          if json == :invalid then out << violation("response is not valid JSON")
+          elsif !json.is_a?(Hash) then out << violation("response is not a single JSON object")
+          end
+        end
+        if res.media_type != expected_type && out.empty?
+          out << { severity: "warning", message: "Content-Type is #{res.content_type}, expected #{type}" }
         end
       end
     end

@@ -43,6 +43,25 @@ class ResolveCheckTest < ActiveSupport::TestCase
     assert_empty violations(check, default: [200, "application/json; charset=utf-8", passport])
   end
 
+  test "a content type from content_type_with_warning passes with a warning and still evaluates the header fields" do
+    check = { "type" => "resolve", "expect" => { "status" => [200], "content_type" => "application/json",
+                                                 "content_type_with_warning" => ["application/ld+json"],
+                                                 "headers" => [{ "name" => "Vary", "contains" => "Accept" }] } }
+    msgs = messages(check, default: [200, "application/ld+json; charset=utf-8", passport, { "vary" => "Accept" }])
+    assert_equal ["warning"], msgs.map { |m| m[:severity] }
+    assert_equal "Content-Type is application/ld+json; charset=utf-8, expected application/json", msgs.first[:message]
+    msgs = messages(check, default: [200, "application/ld+json", passport])
+    assert_equal %w[warning violation], msgs.map { |m| m[:severity] }
+    assert_empty ResolveCheck.new(check, UPI, FakeResolver.new({})).unsupported
+  end
+
+  test "a content type from content_type_with_warning still needs a single JSON object" do
+    check = { "type" => "resolve", "expect" => { "status" => [200], "content_type" => "application/json",
+                                                 "content_type_with_warning" => ["application/ld+json"] } }
+    assert_equal ["response is not a single JSON object"], violations(check, default: [200, "application/ld+json", "[1]"])
+    assert_equal ["Content-Type is text/html, expected application/json"], violations(check, default: [200, "text/html", "<p>"])
+  end
+
   test "JSON content type with a non-object body fails" do
     check = { "type" => "resolve", "expect" => { "status" => [200], "content_type" => "application/json" } }
     assert_match(/single JSON object/, violations(check, default: [200, "application/json", "[1,2]"]).first)
