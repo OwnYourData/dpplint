@@ -6,13 +6,27 @@ class HomeTest < ActionDispatch::IntegrationTest
   LIGHT_BLOCK = /:root \{ color-scheme: light dark;(.*?)\}/m
   DARK_BLOCK = /@media \(prefers-color-scheme: dark\) \{\s*:root \{(.*?)\}\s*\}/m
 
-  test "start page shows the mark next to the title and the funding notice in the footer" do
+  test "start page shows the mark as icon and the funding notice in the footer" do
     get "/"
     assert_response :success
     assert_includes response.body, '<link rel="icon" href="/oyd-mark.svg" type="image/svg+xml">'
-    assert_includes response.body, '<h1 class="brand"><img class="mark" src="/oyd-mark.svg" alt=""'
+    assert_includes response.body, "<h1>Digital product passport checks</h1>"
     assert_includes response.body, %(<div class="funding">#{FundingNotice.html}</div>)
     assert_equal 1, response.body.scan("917177").size
+  end
+
+  test "header spans the window with the mark and name and links to the DPP Service and the repository" do
+    get "/"
+    body = response.body
+    header = body[%r{<header>.*</header>}m]
+    assert header, "header"
+    assert body.index("</header>") < body.index("<main"), "header outside main, so its line spans the window"
+    assert_includes header, %(<a class="brand" href="/"><img class="mark" src="/oyd-mark.svg" alt="" width="15" height="28">dpplint <span>&middot; OwnYourData</span></a>)
+    nav = header[%r{<nav>.*</nav>}m]
+    assert nav, "nav"
+    assert_equal [["https://dpp-service.ownyourdata.eu/", "DPP Service"], ["https://github.com/OwnYourData/dpplint", "GitHub"]],
+                 nav.scan(%r{<a href="([^"]+)">([^<]+)</a>})
+    assert_equal 1, body.scan("<h1").size, "one page title"
   end
 
   test "footer spans the window and names operator, imprint, privacy and funding" do
