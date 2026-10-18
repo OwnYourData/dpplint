@@ -6,7 +6,9 @@ identifier against the automated passport criteria of
 and related regulation).
 
 Results state how many automated checks passed. They are not a certification
-and do not establish a presumption of conformity.
+and do not establish a presumption of conformity. dpplint is part of a research
+project and shares what we currently know; the checks make no claim to be
+complete and are not a legal assessment.
 
 ## How it works
 

@@ -40,6 +40,8 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert_includes footer, %(<a href="https://www.ownyourdata.eu/en/privacy-policy/">Privacy</a>)
     assert_includes footer, %(<a href="/api-docs">API</a>)
     assert_includes footer, "Criteria: dpp-criteria"
+    assert_includes footer, "dpplint is part of a research project and shares what we currently know; " \
+                            "the checks make no claim to be complete and are not a legal assessment."
     assert_includes footer, %(<div class="funding">#{FundingNotice.html}</div>)
   end
 
