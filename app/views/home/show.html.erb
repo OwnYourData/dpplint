@@ -20,8 +20,14 @@
     .wrap { max-width: 960px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
     main.wrap { padding-top: 32px; }
     h1 { font-size: 1.8rem; margin: 0 0 4px; }
-    .brand { display: flex; align-items: center; gap: 9px; }
-    .brand .mark { width: 15px; height: auto; display: block; }
+    header { padding: 20px 0; border-bottom: 1px solid var(--line); }
+    header .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; color: var(--fg); text-decoration: none; }
+    header .brand span { color: var(--muted); font-weight: 400; }
+    header .brand .mark { width: 15px; height: auto; display: block; }
+    header nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 15px; }
+    header nav a:hover { color: var(--fg); }
+    @media (max-width: 600px) { header nav a { margin: 0 14px 0 0; } }
     p.lead { color: var(--muted); margin: 0 0 24px; }
     form { display: flex; gap: 8px; flex-wrap: wrap; }
     input[type=url] { flex: 1 1 420px; padding: 10px 12px; font-size: 1rem; color: var(--fg); background: var(--bg);
@@ -52,8 +58,14 @@
   </style>
 </head>
 <body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/"><img class="mark" src="/oyd-mark.svg" alt="" width="15" height="28">dpplint <span>&middot; OwnYourData</span></a>
+    <nav><a href="https://dpp-service.ownyourdata.eu/">DPP Service</a><a href="https://github.com/OwnYourData/dpplint">GitHub</a></nav>
+  </div>
+</header>
 <main class="wrap">
-  <h1 class="brand"><img class="mark" src="/oyd-mark.svg" alt="" width="15" height="28">dpplint</h1>
+  <h1>Digital product passport checks</h1>
   <p class="lead">Checks the digital product passport retrievable for a product identifier against the automated passport criteria of
     <a href="https://github.com/OwnYourData/dpp-criteria">dpp-criteria</a> (EN 18219, EN 18223 and related regulation).</p>
 
