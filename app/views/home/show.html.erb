@@ -54,7 +54,7 @@
     footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
     footer a { color: var(--muted); }
     footer .legal a { margin-right: 16px; }
-    footer .funding { flex-basis: 100%; font-size: 13px; }
+    footer .about, footer .funding { flex-basis: 100%; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -82,18 +82,16 @@
 </main>
 <footer>
   <div class="wrap">
-    <div>
-      Results report automated checks only. They are no certification and establish no presumption of conformity.<br>
-      The DPP Linter is part of a research project and shares what we currently know; the checks make no claim to be complete and are not a legal assessment.<br>
-      Criteria: dpp-criteria <%= @criteria_ref %> ·
-      <a href="/api-docs">API</a> ·
-      <a href="https://github.com/OwnYourData/dpplint">Source</a><br>
-      Operated by <a href="https://www.ownyourdata.eu/en/">OwnYourData</a>
-    </div>
+    <div>Operated by <a href="https://www.ownyourdata.eu/en/">OwnYourData</a></div>
     <div class="legal">
+      <a href="/api-docs">API</a>
+      <a href="https://github.com/OwnYourData/dpplint">Source</a>
       <a href="https://www.ownyourdata.eu/en/imprint/">Imprint</a>
       <a href="https://www.ownyourdata.eu/en/privacy-policy/">Privacy</a>
     </div>
+    <div class="about">Results report automated checks only. They are no certification and establish no presumption of conformity.
+      The DPP Linter is part of a research project and shares what we currently know; the checks make no claim to be complete and are not a legal assessment.
+      Criteria: dpp-criteria <%= @criteria_ref %>.</div>
     <div class="funding"><%= raw FundingNotice.html %></div>
   </div>
 </footer>
