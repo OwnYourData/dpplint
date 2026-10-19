@@ -14,7 +14,10 @@ complete and are not a legal assessment.
 
 - `/` is a start page: enter a product identifier (the URL encoded in the data
   carrier) and see the result per criterion. `/?productId=<identifier>` runs
-  the check directly and can be linked.
+  the check directly and can be linked. The page waits for a check at most
+  `CHECK_TIMEOUT` seconds (default: `DIDLINT_BUDGET` plus 20, so 40). If the
+  check API answers with an error, without a result or not in time, the page
+  says what happened, links the API call and offers to try again.
 - `GET /api/v1/validate/<product identifier>` retrieves the passport like a
   phone scanning a data carrier (plain HTTPS GET, no credentials) and checks it.
 - `POST /api/v1/validate` checks a passport sent as JSON, or as compact JWS
@@ -143,6 +146,9 @@ service, certificate (cert-manager, ClusterIssuer `letsencrypt-prod`) and ingres
 ```
 docker run --rm --platform linux/amd64 oydeu/dpplint test
 ```
+
+The suite includes the JavaScript tests of the start page
+(`test/javascript`), which run with the node of the image.
 
 ## Funding
 

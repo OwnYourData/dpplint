@@ -57,15 +57,51 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert_match(/footer \.about, footer \.funding \{ flex-basis: 100%;/, response.body)
   end
 
-  test "the page reads a result only from a JSON answer and shows the notices of the check" do
+  test "the page runs each check through the check client, which reads a result only from a JSON answer" do
     get "/"
-    script = response.body[%r{<script>.*</script>}m]
-    assert script, "script"
-    check = script.index('if (!/json/i.test(res.headers.get("Content-Type") || ""))')
-    assert check, "content type is checked"
-    assert check < script.index("await res.json()"), "before the answer is parsed"
-    assert_includes script, '"the server answered HTTP " + res.status + " without a result. Please try again later."'
-    assert_includes script, "(d.notices || []).map("
+    body = response.body
+    client = HomeController::CHECK_CLIENT
+    assert_includes body, client
+    assert_not_includes client, "</script", "the client can be included in the page"
+    assert client.index("if (!isJson(contentType))") < client.index("await res.json()"), "content type is checked before the answer is parsed"
+    assert body.index("function runCheck(") < body.index("DppLintCheck.runCheck(apiUrl, { timeoutMs })"), "client before its use"
+    assert_no_match(/\bfetch\(/, page_script, "the page itself does not fetch")
+    assert_includes page_script, "(d.notices || []).map("
+  end
+
+  test "the page waits at most the didlint budget plus the retrieval of the passport" do
+    config = Rails.configuration.x.dpplint
+    assert_equal config.didlint_budget + 20, config.check_timeout
+    get "/"
+    assert_includes response.body, %(<form id="form" data-timeout-seconds="40">)
+    assert_includes page_script, "const timeoutMs = Number(form.dataset.timeoutSeconds) * 1000;"
+    assert_includes page_script, 'Retrieving and checking the passport … (at most ${timeoutMs / 1000}\u00a0s)'
+    previous = config.check_timeout
+    config.check_timeout = 12.4
+    get "/"
+    assert_includes response.body, %(<form id="form" data-timeout-seconds="12">)
+  ensure
+    config.check_timeout = previous if previous
+  end
+
+  test "a failed check shows what happened, the API call and a button to try again, and the form stays usable" do
+    get "/"
+    body = response.body
+    failure = body[%r{<div id="failure".*?<button type="button" id="retry">Try again</button>\s*</div>}m]
+    assert failure, "failure box with a retry button"
+    assert_includes failure, %(<div id="failure" class="failure" role="alert" hidden>)
+    assert_includes failure, "<strong>The check could not be run</strong>"
+    assert_includes failure, %(<p id="failure-text"></p>)
+    assert_includes failure, %(The check is also available through the API: <a id="failure-api" href="/api-docs">GET /api/v1/validate/…</a>)
+    assert_includes failure, %((<a href="/api-docs">documentation</a>))
+    assert_includes body, %(<div id="status" role="status"></div>)
+    script = page_script
+    assert_includes script, "failureText.textContent = text;"
+    assert_includes script, "failureApi.href = apiUrl;"
+    assert_includes script, "if (!outcome.ok) return fail(DppLintCheck.failureText(outcome, timeoutMs));"
+    assert_includes script, %(fail("The page could not show the result: " + e.message);)
+    assert_match(/finally \{\s*button\.disabled = false;\s*retry\.disabled = false;\s*\}/, script)
+    assert_includes script, %(retry.addEventListener("click", () => { if (lastProductId) run(lastProductId); });)
   end
 
   test "the mark is served as a static file" do
@@ -115,6 +151,11 @@ class HomeTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  # The inline script of the page itself (the last one, after the check client).
+  def page_script
+    response.body.scan(%r{<script>(.*?)</script>}m).last.first
+  end
 
   def page_css
     response.body[%r{<style>(.*?)</style>}m, 1]
