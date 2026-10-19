@@ -149,6 +149,13 @@ for linux/amd64, like the SOyA web-cli it contains.
 service, certificate (cert-manager, ClusterIssuer `letsencrypt-prod`) and ingress
 (nginx).
 
+The deployment runs two replicas with 16 threads each (`RAILS_MAX_THREADS`).
+Replicas keep no state of their own: every check is answered by one replica
+from the criteria and structures in the image. A replica whose threads are all
+busy fails its readiness probe (`/version`) and is taken out of the ingress
+until it answers again; the liveness probe only checks that the port is open, so
+a busy replica is not restarted.
+
 ## Tests
 
 ```

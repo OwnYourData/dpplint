@@ -3,7 +3,12 @@ kind: Deployment
 metadata:
   name: dpplint
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: dpplint
@@ -25,10 +30,12 @@ spec:
           value: production
         - name: DIDLINT_URL
           value: https://didlint.ownyourdata.eu
+        - name: RAILS_MAX_THREADS
+          value: "16"
         resources:
           requests:
             cpu: 100m
-            memory: 384Mi
+            memory: 512Mi
           limits:
             memory: 1Gi
         readinessProbe:
@@ -36,10 +43,13 @@ spec:
             path: /version
             port: 3000
           initialDelaySeconds: 10
-          periodSeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 2
         livenessProbe:
-          httpGet:
-            path: /up
+          tcpSocket:
             port: 3000
           initialDelaySeconds: 30
           periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
