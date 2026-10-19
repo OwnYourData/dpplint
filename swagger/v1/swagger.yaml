@@ -1,6 +1,6 @@
 openapi: 3.0.1
 info:
-  title: dpplint API
+  title: DPP Linter API
   version: v1
   description: >-
     Checks the digital product passport data retrievable for a product
