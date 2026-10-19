@@ -10,25 +10,33 @@
 # check.type links check the related resources it links to; criteria with
 # check.type html check the HTML view of the passport (needs a product
 # identifier, like resolve).
+#
+# A check ends within its time limit (CheckDeadline): a criterion whose
+# requests are cut off by it, or that would need a request after it, is
+# reported as skipped (not_evaluated) with the reason; the results reached
+# before stay, and `timeLimit` and `notices` say that the limit was reached.
 class PassportLinter
   SH = "http://www.w3.org/ns/shacl#".freeze
   REASON_CODES = %w[not_applicable not_implemented no_evidence needs_credentials not_sent unreachable not_evaluated].freeze
 
-  def initialize(catalogue: CriteriaCatalogue.new, web_cli: SoyaWebCli.new, resolver: HttpResolver.new, didlint: Didlint.new)
+  def initialize(catalogue: CriteriaCatalogue.new, deadline: CheckDeadline.new, web_cli: SoyaWebCli.new(deadline: deadline),
+                 resolver: HttpResolver.new(deadline: deadline), didlint: Didlint.new(deadline: deadline))
     @catalogue = catalogue
+    @deadline = deadline
     @web_cli = web_cli
     @resolver = resolver
     @didlint = didlint
   end
 
-  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false, raw: nil)
+  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false, raw: nil, jws_unchecked: nil)
     @product_id = product_id
     @raw = raw
     @jws = jws
     @jws_only = jws_only
+    @jws_unchecked = jws_unchecked
     reports = {}
     criteria = @catalogue.passport_criteria.map do |c|
-      evaluate(c, passport, reports).merge(status: c["status"], counted: c["status"] == "active")
+      within_time_limit(c, passport, reports).merge(status: c["status"], counted: c["status"] == "active")
     end
     active, proposed = criteria.partition { |c| c[:counted] }
     {
@@ -37,7 +45,8 @@ class PassportLinter
       summary: summary(active).merge(proposed_not_counted: summary(proposed.select { |c| c[:status] == "proposed" })),
       criteria: criteria,
       notice: "Results of automated checks only. They are no certification and establish no presumption of conformity.",
-      notices: SoyaContext.new.notices(reports.reject { |_, r| r[:error] }.keys),
+      notices: SoyaContext.new.notices(reports.reject { |_, r| r[:error] }.keys) + time_limit_notices(criteria),
+      timeLimit: { seconds: @deadline.seconds, reached: @deadline.hit? },
       "dpp-criteria": Rails.configuration.x.dpplint.criteria_ref
     }
   end
@@ -61,6 +70,29 @@ class PassportLinter
     }
   end
 
+  # A criterion cut off by the time limit is skipped (not_evaluated); what it
+  # had found is not kept, because it is incomplete.
+  def within_time_limit(criterion, passport, reports)
+    evaluate(criterion, passport, reports)
+  rescue CheckDeadline::Reached => e
+    skip(base_for(criterion), e.message, "not_evaluated")
+  end
+
+  def time_limit_notices(criteria)
+    return [] unless @deadline.hit?
+
+    cut = criteria.count { |c| c[:reason].to_s.include?(@deadline.reason) }
+    ["The time limit of the check was reached (#{@deadline.seconds.round(1).to_s.delete_suffix('.0')} s); " \
+     "#{cut} #{cut == 1 ? 'criterion was' : 'criteria were'} not evaluated in time."]
+  end
+
+  def base_for(criterion)
+    base = { id: criterion["id"], title: criterion["title"], level: criterion["level"] }
+    url = @catalogue.description_url(criterion["id"])
+    base[:description_url] = url if url
+    base
+  end
+
   # A skipped result with its reason and reason_code ("Results" in CRITERIA-FORMAT.md).
   def skip(base, reason, code)
     raise ArgumentError, "unknown reason_code #{code}" unless REASON_CODES.include?(code)
@@ -69,9 +101,7 @@ class PassportLinter
   end
 
   def evaluate(criterion, passport, reports)
-    base = { id: criterion["id"], title: criterion["title"], level: criterion["level"] }
-    url = @catalogue.description_url(criterion["id"])
-    base[:description_url] = url if url
+    base = base_for(criterion)
     check = criterion["check"] || {}
 
     return resolve(base, check) if check["type"] == "resolve"
@@ -136,6 +166,8 @@ class PassportLinter
   end
 
   def proof(base, check, passport)
+    return skip(base, @jws_unchecked, "not_evaluated") if @jws_unchecked
+
     outcome = ProofCheck.new(check, passport, raw: @raw, jws: @jws, jws_only: @jws_only, didlint: @didlint, resolver: @resolver).outcome
     return skip(base, outcome.skipped, outcome.code) if outcome.skipped
 

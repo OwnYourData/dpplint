@@ -123,7 +123,17 @@ components:
           description: >-
             Notes on how the check was run, for example that a SOyA structure was
             evaluated with a cached copy of its SOyA context because SOyA was not
-            reachable when the image was built. Empty if there is nothing to note.
+            reachable when the image was built, or that the time limit of the
+            check was reached. Empty if there is nothing to note.
           items: { type: string }
+        timeLimit:
+          type: object
+          description: >-
+            Time limit of the check (CHECK_DEADLINE). If it was reached, the
+            criteria not evaluated in time are skipped with reason_code
+            not_evaluated; the results reached before are kept.
+          properties:
+            seconds: { type: number, example: 35 }
+            reached: { type: boolean }
         dpp-criteria:
           type: string

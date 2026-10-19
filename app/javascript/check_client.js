@@ -1,6 +1,7 @@
 // Runs a check through the dpplint API for the start page, with a time limit,
-// and turns every way it can fail into a message for people. The start page
-// includes it as DppLintCheck; test/javascript loads it with require().
+// and turns every way it can fail into a message for people; oneAtATime keeps
+// the page to one running check. The start page includes it as DppLintCheck;
+// test/javascript loads it with require().
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -57,5 +58,23 @@
     }
   }
 
-  return { runCheck, failureText };
+  // Wraps an async function so that it never runs twice at the same time: a
+  // call while it runs is refused and returns false.
+  function oneAtATime(fn) {
+    let running = false;
+    const wrapped = async (...args) => {
+      if (running) return false;
+      running = true;
+      try {
+        await fn(...args);
+      } finally {
+        running = false;
+      }
+      return true;
+    };
+    wrapped.running = () => running;
+    return wrapped;
+  }
+
+  return { runCheck, failureText, oneAtATime };
 });

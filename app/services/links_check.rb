@@ -3,7 +3,9 @@
 # in the passport, must carry the attributes in check.required and a URL that
 # answers. A URL that does not answer is reported with the severity in
 # check.unreachable (default warning), so that outages of third-party sites do
-# not fail the passport. At most MAX_LINKS URLs are requested, in parallel.
+# not fail the passport. At most MAX_LINKS URLs are requested, in parallel;
+# each request ends within the time limit of the check, and the check waits for
+# all of them, so none keeps running after it.
 class LinksCheck
   MAX_LINKS = 20
 
@@ -45,7 +47,7 @@ class LinksCheck
       out << warning("only the first #{MAX_LINKS} of #{unique.size} URLs were requested")
       unique = unique.first(MAX_LINKS)
     end
-    results = unique.map { |label, url| Thread.new { [label, url, @resolver.probe(url)] } }.map(&:value)
+    results = probe_all(unique)
     severity = @check["unreachable"] == "error" ? "violation" : "warning"
     results.each do |label, url, res|
       next if res.error.nil? && res.status.between?(200, 399)
@@ -53,6 +55,27 @@ class LinksCheck
       out << { severity: severity, message: "#{label}: #{url} does not answer (#{res.error || "HTTP #{res.status}"})" }
     end
     out
+  end
+
+  # [[label, url, response], …]. Waits for every request, then re-raises the
+  # first error of one of them (such as CheckDeadline::Reached).
+  def probe_all(links)
+    threads = links.map do |label, url|
+      Thread.new do
+        Thread.current.name = "dpplint links"
+        Thread.current.report_on_exception = false
+        [label, url, @resolver.probe(url)]
+      end
+    end
+    outcomes = threads.map do |t|
+      t.value
+    rescue StandardError => e
+      e
+    end
+    error = outcomes.find { |o| o.is_a?(StandardError) }
+    raise error if error
+
+    outcomes
   end
 
   def collect(node)

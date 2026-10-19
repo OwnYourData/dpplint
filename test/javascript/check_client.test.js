@@ -5,11 +5,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const path = require("node:path");
-const { runCheck, failureText } = require(path.join(__dirname, "../../app/javascript/check_client.js"));
+const { runCheck, failureText, oneAtATime } = require(path.join(__dirname, "../../app/javascript/check_client.js"));
 
 const TIMEOUT = 400;
 let server;
 let base;
+let counted = 0;
 const open = new Set();
 
 // Path -> handler(req, res). A handler that does nothing never answers.
@@ -25,6 +26,7 @@ const routes = {
   "/hang": () => {},
   "/hang-body": (req, res) => { res.writeHead(200, { "Content-Type": "application/json" }); res.write('{"summary": '); },
   "/slow-ok": (req, res) => setTimeout(() => send(res, 200, "application/json", '{"ok":1}'), 100),
+  "/count": (req, res) => { counted += 1; setTimeout(() => send(res, 200, "application/json", '{"ok":1}'), 150); },
 };
 
 function send(res, status, type, body) {
@@ -127,4 +129,26 @@ test("not reachable: no connection is reported as such, without waiting for the 
   assert.deepEqual(outcome, { ok: false, kind: "unreachable" });
   assert.ok(took < 2000, `waited ${took} ms`);
   assert.equal(failureText(outcome, 40000), "The DPP Linter could not be reached. Check your connection, or try again in a moment.");
+});
+
+test("one check at a time: a second start while one runs sends no request", async () => {
+  counted = 0;
+  const start = oneAtATime(() => runCheck(base + "/count", { timeoutMs: TIMEOUT }));
+  const first = start();
+  assert.equal(start.running(), true);
+  assert.equal(await start(), false, "the second start is refused");
+  assert.equal(await first, true);
+  assert.equal(start.running(), false);
+  assert.equal(counted, 1, "only one request while the first check ran");
+  assert.equal(await start(), true, "after it, a new check can start");
+  assert.equal(counted, 2);
+});
+
+test("one check at a time: a check that fails or times out frees the page for the next one", async () => {
+  const start = oneAtATime(() => runCheck(base + "/hang", { timeoutMs: TIMEOUT }));
+  assert.equal(await start(), true);
+  assert.equal(start.running(), false);
+  const throwing = oneAtATime(async () => { throw new Error("render failed"); });
+  await assert.rejects(throwing(), /render failed/);
+  assert.equal(throwing.running(), false);
 });

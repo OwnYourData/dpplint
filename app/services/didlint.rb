@@ -8,7 +8,9 @@ require "net/http"
 # check together at most `budget` seconds. Once didlint has failed to answer,
 # the remaining requests of the check are not sent; they raise Unavailable with
 # the same reason, so the criteria that need didlint are reported as not
-# evaluated instead of holding up the whole check.
+# evaluated instead of holding up the whole check. Neither limit reaches beyond
+# the time limit of the check (CheckDeadline); once that is reached,
+# CheckDeadline::Reached is raised.
 class Didlint
   class Unavailable < StandardError; end
 
@@ -16,10 +18,12 @@ class Didlint
 
   def initialize(base = Rails.configuration.x.dpplint.didlint,
                  timeout: Rails.configuration.x.dpplint.didlint_timeout,
-                 budget: Rails.configuration.x.dpplint.didlint_budget)
+                 budget: Rails.configuration.x.dpplint.didlint_budget,
+                 deadline: CheckDeadline.new)
     @base = base.chomp("/")
     @timeout = timeout.to_f
     @budget = budget.to_f
+    @deadline = deadline
     @cache = {}
     @spent = 0.0
     @down = nil
@@ -63,18 +67,21 @@ class Didlint
     raise down!("didlint was not asked: the time budget of #{seconds(@budget)} for this check is used up") if remaining <= 0
 
     wait = [@timeout, remaining].min
+    limits = @deadline.split([OPEN_TIMEOUT, wait].min, wait)
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     begin
-      res = request(path, wait)
+      res = request(path, limits.connect, limits.read)
     ensure
       @spent += Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
     end
     parse(res)
   rescue Net::OpenTimeout
-    raise down!("didlint not reachable (no connection within #{seconds([OPEN_TIMEOUT, wait].min)})")
+    @deadline.timed_out!(limits)
+    raise down!("didlint not reachable (no connection within #{seconds(limits.connect)})")
   rescue Net::ReadTimeout
-    raise down!("didlint did not answer within #{seconds(wait)}")
-  rescue Unavailable
+    @deadline.timed_out!(limits)
+    raise down!("didlint did not answer within #{seconds(limits.read)}")
+  rescue Unavailable, CheckDeadline::Reached
     raise
   rescue StandardError => e
     raise down!("didlint not reachable (#{e.message})")
@@ -82,12 +89,13 @@ class Didlint
 
   # Net::HTTP repeats an idempotent request once after a timeout; max_retries 0
   # keeps the wait at one timeout.
-  def request(path, wait)
+  def request(path, open, read)
     uri = URI("#{@base}/#{path}")
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = uri.scheme == "https"
-    http.open_timeout = [OPEN_TIMEOUT, wait].min
-    http.read_timeout = wait
+    http.open_timeout = open
+    http.read_timeout = read
+    http.write_timeout = read
     http.max_retries = 0
     http.start { http.request(Net::HTTP::Get.new(uri, "Accept" => "application/json")) }
   end
