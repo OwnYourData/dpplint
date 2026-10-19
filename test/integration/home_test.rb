@@ -21,12 +21,13 @@ class HomeTest < ActionDispatch::IntegrationTest
     header = body[%r{<header>.*</header>}m]
     assert header, "header"
     assert body.index("</header>") < body.index("<main"), "header outside main, so its line spans the window"
-    assert_includes header, %(<a class="brand" href="/"><img class="mark" src="/oyd-mark.svg" alt="" width="15" height="28">dpplint <span>&middot; OwnYourData</span></a>)
+    assert_includes header, %(<a class="brand" href="/"><img class="mark" src="/oyd-mark.svg" alt="" width="15" height="28">DPP Linter <span>&middot; OwnYourData</span></a>)
     nav = header[%r{<nav>.*</nav>}m]
     assert nav, "nav"
     assert_equal [["https://dpp-service.ownyourdata.eu/", "DPP Service"], ["https://github.com/OwnYourData/dpplint", "GitHub"]],
                  nav.scan(%r{<a href="([^"]+)">([^<]+)</a>})
     assert_equal 1, body.scan("<h1").size, "one page title"
+    assert_includes body, "<title>DPP Linter – Digital Product Passport checks</title>"
   end
 
   test "footer spans the window and names operator, imprint, privacy and funding" do
