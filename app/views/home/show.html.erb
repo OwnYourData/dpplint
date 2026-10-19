@@ -128,6 +128,7 @@
         (${d.summary.failed} failed, ${d.summary.warnings} with warnings, ${esc(skippedText(d.summary))})
         ${d.summary.proposed_not_counted ? `<div class="notice">Proposed criteria, not counted: ${esc(d.summary.proposed_not_counted.text)}</div>` : ""}
         <div class="notice" style="overflow-wrap:anywhere">Retrieved: ${esc(retrieval.url)} · HTTP ${esc(retrieval.status)} · ${esc(retrieval.contentType)}${retrieval.error ? " · " + esc(retrieval.error) : ""}</div>
+        ${(d.notices || []).map((n) => `<div class="notice">${esc(n)}</div>`).join("")}
         <div class="notice">${esc(d.notice)}</div></div>
       <div class="scroll"><table><thead><tr><th>Criterion</th><th>Requirement and findings</th><th>Level</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   };
@@ -139,6 +140,9 @@
     history.replaceState(null, "", "?productId=" + encodeURIComponent(productId));
     try {
       const res = await fetch("/api/v1/validate/" + productId, { headers: { Accept: "application/json" } });
+      if (!/json/i.test(res.headers.get("Content-Type") || "")) {
+        throw new Error("the server answered HTTP " + res.status + " without a result. Please try again later.");
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
       statusEl.textContent = "";

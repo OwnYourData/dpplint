@@ -46,6 +46,17 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert_includes footer, %(<div class="funding">#{FundingNotice.html}</div>)
   end
 
+  test "the page reads a result only from a JSON answer and shows the notices of the check" do
+    get "/"
+    script = response.body[%r{<script>.*</script>}m]
+    assert script, "script"
+    check = script.index('if (!/json/i.test(res.headers.get("Content-Type") || ""))')
+    assert check, "content type is checked"
+    assert check < script.index("await res.json()"), "before the answer is parsed"
+    assert_includes script, '"the server answered HTTP " + res.status + " without a result. Please try again later."'
+    assert_includes script, "(d.notices || []).map("
+  end
+
   test "the mark is served as a static file" do
     assert File.file?(Rails.public_path.join("oyd-mark.svg"))
   end

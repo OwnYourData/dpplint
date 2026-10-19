@@ -52,6 +52,10 @@ paths:
   /version:
     get:
       summary: Versions of dpplint, dpp-criteria and the SOyA web-cli
+      description: >-
+        soya-context says when the SOyA structures of the image were built and
+        whether their SOyA context was fetched or taken from the cached copy of
+        dpp-criteria, with its date.
       responses:
         "200":
           description: Version information
@@ -114,5 +118,12 @@ components:
                     message: { type: string }
         notice:
           type: string
+        notices:
+          type: array
+          description: >-
+            Notes on how the check was run, for example that a SOyA structure was
+            evaluated with a cached copy of its SOyA context because SOyA was not
+            reachable when the image was built. Empty if there is nothing to note.
+          items: { type: string }
         dpp-criteria:
           type: string

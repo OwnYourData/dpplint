@@ -4,7 +4,8 @@ class ApplicationController < ActionController::API
       service: "dpplint",
       version: Dpplint::VERSION,
       "dpp-criteria": Rails.configuration.x.dpplint.criteria_ref,
-      "soya-web-cli": SoyaWebCli.new.version
+      "soya-web-cli": SoyaWebCli.new.version,
+      "soya-context": SoyaContext.new.version_info
     }
   end
 end

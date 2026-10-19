@@ -3,14 +3,17 @@
 ARG SOYA_WEB_CLI_IMAGE=oydeu/soya-web-cli:260704b
 
 # SOyA structures and criteria from dpp-criteria, built with soya init and the
-# SOyA context embedded, so that validation needs no network access.
+# SOyA context embedded, so that validation needs no network access. If the
+# context cannot be retrieved, the build uses the cached copy of dpp-criteria;
+# build/soya-context.json (SOYA_CONTEXT.json in the image) records which.
 FROM ${SOYA_WEB_CLI_IMAGE} AS criteria
 ARG DPP_CRITERIA_REF=main
 RUN apk add --no-cache git && \
     git clone https://github.com/OwnYourData/dpp-criteria.git /criteria && \
     cd /criteria && git checkout ${DPP_CRITERIA_REF} && \
     git rev-parse --short HEAD > /criteria/REF && \
-    node scripts/build_structures.js
+    node scripts/build_structures.js && \
+    { [ -f build/soya-context.json ] || echo '{}' > build/soya-context.json; }
 
 FROM ${SOYA_WEB_CLI_IMAGE}
 RUN apk add --no-cache ruby ruby-bundler tzdata yaml
@@ -24,6 +27,7 @@ COPY --from=criteria /criteria/criteria ./criteria
 COPY --from=criteria /criteria/build/structures ./structures
 COPY --from=criteria /criteria/scripts/serve_structures.js ./docker/serve_structures.js
 COPY --from=criteria /criteria/REF ./CRITERIA_REF
+COPY --from=criteria /criteria/build/soya-context.json ./SOYA_CONTEXT.json
 
 ENV RAILS_ENV=production \
     SOYA_WEB_CLI=http://127.0.0.1:8080

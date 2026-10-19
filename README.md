@@ -58,7 +58,12 @@ complete and are not a legal assessment.
   check linked verifiable presentations for the VC Data Model 2.0 context. The
   didlint instance is set with `DIDLINT_URL` (default
   `https://didlint.ownyourdata.eu`); it is the only service dpplint calls
-  besides the passport and the resources it links.
+  besides the passport and the resources it links. A check waits for didlint
+  at most `DIDLINT_TIMEOUT` seconds per request (default 10) and
+  `DIDLINT_BUDGET` seconds in total (default 20). If didlint does not answer in
+  time, or answers with something other than JSON, the criteria that need it
+  are reported as `skipped` (`not_evaluated`) with the reason, and the rest of
+  the check goes on.
 - Criteria with `check.type: proof` check integrity proofs of the passport.
   Without `key_from` (DPP-SEC-002) every proof found is verified with the key
   it names:
@@ -109,7 +114,10 @@ complete and are not a legal assessment.
 The image contains everything it needs at run time: the Rails API, the SOyA
 web-cli (`oydeu/soya-web-cli`) and the criteria and SOyA structures of
 dpp-criteria, built with `soya init` when the image is built. It does not
-contact soya.ownyourdata.eu.
+contact soya.ownyourdata.eu. The SOyA context the structures import is
+fetched when the image is built; if it cannot be retrieved, the build uses
+the cached copy of dpp-criteria. `GET /version` shows which (`soya-context`),
+and results checked against such a structure say so in `notices`.
 
 ## Build and run
 
