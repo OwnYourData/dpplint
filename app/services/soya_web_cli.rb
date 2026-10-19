@@ -2,16 +2,18 @@ require "net/http"
 
 # Client for the SOyA web-cli running inside the same image. It validates
 # against the structures built into the image and does not contact the SOyA
-# repository at soya.ownyourdata.eu.
+# repository at soya.ownyourdata.eu. Each call waits at most OPEN_TIMEOUT and
+# READ_TIMEOUT, but never beyond the time limit of the check (CheckDeadline).
 class SoyaWebCli
   class Error < StandardError; end
 
   OPEN_TIMEOUT = 5
   READ_TIMEOUT = 30
 
-  def initialize(base = Rails.configuration.x.dpplint.soya_web_cli, read_timeout: READ_TIMEOUT)
+  def initialize(base = Rails.configuration.x.dpplint.soya_web_cli, read_timeout: READ_TIMEOUT, deadline: CheckDeadline.new)
     @base = base.chomp("/")
     @read_timeout = read_timeout
+    @deadline = deadline
   end
 
   def acquire(structure, passport) = post("acquire/#{structure}", passport)
@@ -34,13 +36,15 @@ class SoyaWebCli
 
   def post(path, body)
     uri = URI("#{@base}/api/v1/#{path}")
-    res = Net::HTTP.start(uri.host, uri.port, open_timeout: OPEN_TIMEOUT, read_timeout: @read_timeout) do |http|
+    limits = @deadline.split(OPEN_TIMEOUT, @read_timeout)
+    res = Net::HTTP.start(uri.host, uri.port, open_timeout: limits.connect, read_timeout: limits.read, write_timeout: limits.read) do |http|
       http.post(uri.request_uri, body.to_json, "Content-Type" => "application/json", "Accept" => "application/json")
     end
     parse(path, res)
-  rescue Error
+  rescue Error, CheckDeadline::Reached
     raise
-  rescue Net::OpenTimeout, Net::ReadTimeout
+  rescue Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout
+    @deadline.timed_out!(limits)
     raise Error, "SOyA web-cli did not answer #{path} within #{@read_timeout} s"
   rescue StandardError => e
     raise Error, "SOyA web-cli not reachable for #{path} (#{e.message})"

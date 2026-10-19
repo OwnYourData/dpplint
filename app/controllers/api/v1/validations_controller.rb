@@ -1,15 +1,19 @@
 module Api
   module V1
+    # Every check, with or without retrieval, ends within its time limit
+    # (CHECK_DEADLINE), counted from the start of the request.
     class ValidationsController < ActionController::API
       # GET /api/v1/validate/<product identifier>
       def show
         product_id = params[:product_id].to_s
         product_id += "?#{request.query_string}" if request.query_string.present?
         product_id = product_id.sub(%r{\A(https?):/(?!/)}, '\1://')
-        resolver = HttpResolver.new
+        deadline = CheckDeadline.new
+        resolver = HttpResolver.new(deadline: deadline)
         fetch = PassportFetcher.new(resolver).fetch(product_id)
-        render json: PassportLinter.new(resolver: resolver)
-          .run(passport: fetch.json, product_id: product_id, retrieval: fetch.info, jws: fetch.jws, jws_only: fetch.jws_only, raw: fetch.raw)
+        render json: PassportLinter.new(deadline: deadline, resolver: resolver)
+          .run(passport: fetch.json, product_id: product_id, retrieval: fetch.info, jws: fetch.jws, jws_only: fetch.jws_only,
+               raw: fetch.raw, jws_unchecked: fetch.jws_unchecked)
       end
 
       # POST /api/v1/validate with a passport as JSON body, or as compact JWS

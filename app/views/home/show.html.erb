@@ -38,6 +38,7 @@
     .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
     a { color: var(--accent); }
     .hint a { cursor: pointer; overflow-wrap: anywhere; }
+    .hint a[aria-disabled="true"] { color: var(--muted); cursor: default; }
     .scroll { overflow-x: auto; }
     #status { margin: 24px 0 8px; color: var(--muted); }
     .failure { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--fail); border-radius: 8px; padding: 16px; margin: 16px 0; }
@@ -119,6 +120,7 @@
   const failureText = document.getElementById("failure-text");
   const failureApi = document.getElementById("failure-api");
   const retry = document.getElementById("retry");
+  const examples = document.querySelectorAll(".example");
   const timeoutMs = Number(form.dataset.timeoutSeconds) * 1000;
   let lastProductId = "";
   const order = { failed: 0, warning: 1, passed: 2, skipped: 3 };
@@ -151,14 +153,15 @@
       <div class="scroll"><table><thead><tr><th>Criterion</th><th>Requirement and findings</th><th>Level</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   };
 
-  // The page waits at most timeoutMs (the time budget of didlint plus the
-  // retrieval of the passport); every failure ends in a message with a way to
+  // The page waits at most timeoutMs (the time limit of a check in the API
+  // plus 5 s for the transfer); every failure ends in a message with a way to
   // try again, and the form stays usable.
   const run = async (productId) => {
     lastProductId = productId;
     const apiUrl = "/api/v1/validate/" + productId;
     button.disabled = true;
     retry.disabled = true;
+    examples.forEach((a) => a.setAttribute("aria-disabled", "true"));
     resultEl.innerHTML = "";
     failureEl.hidden = true;
     statusEl.textContent = `Retrieving and checking the passport … (at most ${timeoutMs / 1000}\u00a0s)`;
@@ -181,14 +184,23 @@
     } finally {
       button.disabled = false;
       retry.disabled = false;
+      examples.forEach((a) => a.removeAttribute("aria-disabled"));
     }
   };
 
-  retry.addEventListener("click", () => { if (lastProductId) run(lastProductId); });
+  // One check at a time per page: while one runs, a further start from the
+  // form, an example or "Try again" is refused and sends no request.
+  const start = DppLintCheck.oneAtATime(run);
 
-  form.addEventListener("submit", (e) => { e.preventDefault(); run(input.value.trim()); });
-  document.querySelectorAll(".example").forEach((a) => a.addEventListener("click", (e) => { input.value = e.target.textContent; run(input.value); }));
-  if (input.value) run(input.value);
+  retry.addEventListener("click", () => { if (lastProductId) start(lastProductId); });
+
+  form.addEventListener("submit", (e) => { e.preventDefault(); start(input.value.trim()); });
+  examples.forEach((a) => a.addEventListener("click", (e) => {
+    if (start.running()) return;
+    input.value = e.target.textContent;
+    start(input.value);
+  }));
+  if (input.value) start(input.value);
 </script>
 </body>
 </html>

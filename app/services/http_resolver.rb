@@ -1,6 +1,7 @@
 require "httpx"
 require "ipaddr"
 require "resolv"
+require "timeout"
 
 # Plain HTTP(S) GET like a phone scanning a data carrier: no credentials,
 # redirects followed, optional Accept header. Responses are cached per run.
@@ -17,6 +18,11 @@ require "resolv"
 # The connection is pinned to the address that was checked (httpx option
 # `addresses`), while TLS SNI, certificate check and Host header keep the
 # host name. DPPLINT_ALLOW_PRIVATE_NETWORKS=1 lifts this for local development.
+#
+# Each request waits at most DNS_TIMEOUT for the name, CONNECT_TIMEOUT for the
+# connection and GET_TIMEOUT (HEAD_TIMEOUT for probes) for the answer, per
+# redirect, but never beyond the time limit of the check (CheckDeadline): once
+# that is reached, CheckDeadline::Reached is raised instead of an answer.
 class HttpResolver
   Response = Struct.new(:url, :status, :content_type, :body, :error, :headers, :http_version, keyword_init: true) do
     def media_type = content_type.to_s.split(";").first.to_s.strip.downcase
@@ -24,6 +30,12 @@ class HttpResolver
   end
 
   MAX_REDIRECTS = 5
+  DNS_TIMEOUT = 5
+  CONNECT_TIMEOUT = 10
+  GET_TIMEOUT = 20
+  HEAD_TIMEOUT = 10
+  # Share of the time left that resolving a name may take at most.
+  DNS_SHARE = 0.2
 
   BLOCKED = %w[
     0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12
@@ -32,9 +44,11 @@ class HttpResolver
   ].map { |cidr| IPAddr.new(cidr) }.freeze
 
   class Blocked < StandardError; end
+  class DnsTimeout < Blocked; end
 
-  def initialize(allow_private: ENV["DPPLINT_ALLOW_PRIVATE_NETWORKS"] == "1")
+  def initialize(allow_private: ENV["DPPLINT_ALLOW_PRIVATE_NETWORKS"] == "1", deadline: CheckDeadline.new)
     @allow_private = allow_private
+    @deadline = deadline
     @cache = {}
     @lock = Mutex.new
   end
@@ -52,9 +66,10 @@ class HttpResolver
     end
   end
 
-  # Raises Blocked unless every address of the host is public.
-  def self.public_address!(host)
-    addresses = host.match?(/\A[\d.]+\z|:/) ? [host.delete("[]")] : Resolv.getaddresses(host)
+  # Raises Blocked unless every address of the host is public, or if the name
+  # cannot be resolved within `timeout` seconds.
+  def self.public_address!(host, timeout: DNS_TIMEOUT)
+    addresses = host.match?(/\A[\d.]+\z|:/) ? [host.delete("[]")] : resolve_name(host, timeout)
     raise Blocked, "#{host} cannot be resolved" if addresses.empty?
 
     addresses.each do |a|
@@ -63,6 +78,14 @@ class HttpResolver
       raise Blocked, "#{host} resolves to #{a}, which is not a public address" if BLOCKED.any? { |net| net.include?(ip) }
     end
     addresses.first
+  end
+
+  # Resolv answers through the DNS servers of the system; its own retries can
+  # take far longer than a check may, so the lookup as a whole is limited.
+  def self.resolve_name(host, timeout)
+    Timeout.timeout(timeout) { Resolv.getaddresses(host) }
+  rescue Timeout::Error
+    raise DnsTimeout, "#{host} cannot be resolved within #{timeout.round(1)} s"
   end
 
   private
@@ -94,6 +117,8 @@ class HttpResolver
     Response.new(url: uri.to_s, error: "more than #{MAX_REDIRECTS} redirects")
   rescue URI::InvalidURIError
     Response.new(url: url, error: "not a valid URL")
+  rescue CheckDeadline::Reached
+    raise
   rescue Blocked => e
     Response.new(url: uri.to_s, error: "not retrieved: #{e.message}")
   rescue StandardError => e
@@ -104,13 +129,29 @@ class HttpResolver
     headers = {}
     headers["accept"] = accept if accept
     headers["range"] = "bytes=0-0" if mode == :range
-    options = { timeout: { connect_timeout: 10, request_timeout: mode == :get ? 20 : 10 } }
-    options[:addresses] = [self.class.public_address!(uri.host)] unless @allow_private
+    options = {}
+    options[:addresses] = [public_address(uri.host)] unless @allow_private
+    limits = @deadline.split(CONNECT_TIMEOUT, mode == :get ? GET_TIMEOUT : HEAD_TIMEOUT)
+    options[:timeout] = { connect_timeout: limits.connect, settings_timeout: limits.read, request_timeout: limits.read }
     session = HTTPX.with(**options)
     res = mode == :head ? session.head(uri.to_s, headers: headers) : session.get(uri.to_s, headers: headers)
-    raise res.error if res.is_a?(HTTPX::ErrorResponse)
+    if res.is_a?(HTTPX::ErrorResponse)
+      @deadline.timed_out!(limits) if res.error.is_a?(HTTPX::TimeoutError)
+      raise res.error
+    end
 
     res
+  end
+
+  # The checked address of the host; the name lookup gets at most a share of
+  # the time left.
+  def public_address(host)
+    @deadline.check!
+    dns = [DNS_TIMEOUT, @deadline.remaining * DNS_SHARE].min
+    self.class.public_address!(host, timeout: dns)
+  rescue DnsTimeout
+    @deadline.timed_out!(CheckDeadline::Limits.new(dns, dns, dns < DNS_TIMEOUT))
+    raise
   end
 
   # httpx keeps every field as a list of values under its lower-case name.

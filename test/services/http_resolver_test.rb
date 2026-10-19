@@ -34,7 +34,7 @@ class HttpResolverTest < ActiveSupport::TestCase
   # name would resolve to its public address; every other host is checked as usual.
   def with_pin_test(&block)
     original = HttpResolver.method(:public_address!)
-    HttpResolver.stub(:public_address!, ->(host) { host == "pin.test" ? "127.0.0.1" : original.call(host) }, &block)
+    HttpResolver.stub(:public_address!, ->(host, **opts) { host == "pin.test" ? "127.0.0.1" : original.call(host, **opts) }, &block)
   end
 
   test "internal addresses are refused" do

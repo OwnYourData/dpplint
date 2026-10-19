@@ -69,9 +69,10 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert_includes page_script, "(d.notices || []).map("
   end
 
-  test "the page waits at most the didlint budget plus the retrieval of the passport" do
+  test "the page waits at most the time limit of the API check plus 5 s" do
     config = Rails.configuration.x.dpplint
-    assert_equal config.didlint_budget + 20, config.check_timeout
+    assert_equal 35.0, config.check_deadline
+    assert_equal config.check_deadline + 5, config.check_timeout
     get "/"
     assert_includes response.body, %(<form id="form" data-timeout-seconds="40">)
     assert_includes page_script, "const timeoutMs = Number(form.dataset.timeoutSeconds) * 1000;"
@@ -100,8 +101,19 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert_includes script, "failureApi.href = apiUrl;"
     assert_includes script, "if (!outcome.ok) return fail(DppLintCheck.failureText(outcome, timeoutMs));"
     assert_includes script, %(fail("The page could not show the result: " + e.message);)
-    assert_match(/finally \{\s*button\.disabled = false;\s*retry\.disabled = false;\s*\}/, script)
-    assert_includes script, %(retry.addEventListener("click", () => { if (lastProductId) run(lastProductId); });)
+    assert_match(/finally \{\s*button\.disabled = false;\s*retry\.disabled = false;\s*examples\.forEach\(\(a\) => a\.removeAttribute\("aria-disabled"\)\);\s*\}/, script)
+    assert_includes script, %(retry.addEventListener("click", () => { if (lastProductId) start(lastProductId); });)
+  end
+
+  test "the page runs one check at a time: every start goes through oneAtATime, and the examples are disabled meanwhile" do
+    get "/"
+    script = page_script
+    assert_includes script, "const start = DppLintCheck.oneAtATime(run);"
+    starts = script.scan(/\b(start|run)\((lastProductId|input\.value\.trim\(\)|input\.value)\)/)
+    assert_equal [%w[start lastProductId], ["start", "input.value.trim()"], %w[start input.value], %w[start input.value]], starts
+    assert_match(/examples\.forEach\(\(a\) => a\.addEventListener\("click", \(e\) => \{\s*if \(start\.running\(\)\) return;/, script)
+    assert_includes script, %(examples.forEach((a) => a.setAttribute("aria-disabled", "true"));)
+    assert_includes page_css, %(.hint a[aria-disabled="true"] { color: var(--muted); cursor: default; })
   end
 
   test "the mark is served as a static file" do

@@ -14,12 +14,20 @@ complete and are not a legal assessment.
 
 - `/` is a start page: enter a product identifier (the URL encoded in the data
   carrier) and see the result per criterion. `/?productId=<identifier>` runs
-  the check directly and can be linked. The page waits for a check at most
-  `CHECK_TIMEOUT` seconds (default: `DIDLINT_BUDGET` plus 20, so 40). If the
-  check API answers with an error, without a result or not in time, the page
-  says what happened, links the API call and offers to try again.
+  the check directly and can be linked. The page runs one check at a time and
+  waits for it at most `CHECK_TIMEOUT` seconds (default: `CHECK_DEADLINE` plus
+  5, so 40). If the check API answers with an error, without a result or not
+  in time, the page says what happened, links the API call and offers to try
+  again.
 - `GET /api/v1/validate/<product identifier>` retrieves the passport like a
   phone scanning a data carrier (plain HTTPS GET, no credentials) and checks it.
+- Every check ends within `CHECK_DEADLINE` seconds (default 35). The limits of
+  single requests (name lookup 5 s, connection 10 s, answer 20 s for GET and
+  10 s for the links, per redirect; SOyA web-cli 5 s and 30 s; didlint, see
+  below) are cut to the time left. When the time is up, no further request is
+  sent: the criteria evaluated so far keep their results, the others are
+  reported as `skipped` (`not_evaluated`) with the reason, and `timeLimit` and
+  `notices` in the result say that the limit was reached.
 - `POST /api/v1/validate` checks a passport sent as JSON, or as compact JWS
   with `Content-Type: application/vc+jwt` (also `application/jwt`,
   `application/jose`).
