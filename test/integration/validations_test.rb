@@ -23,6 +23,7 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     end
     assert_equal 0, result["summary"]["failed"]
     assert_match(/\A\d+ of \d+ automated checks passed\z/, result["summary"]["text"])
+    assert_kind_of Array, result["notices"]
   end
 
   test "missing economic operator fails the header and responsibility checks" do
@@ -128,5 +129,6 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     body = JSON.parse(response.body)
     assert_equal "dpplint", body["service"]
     assert body["soya-web-cli"].present?
+    assert body.key?("soya-context")
   end
 end

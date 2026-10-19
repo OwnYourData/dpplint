@@ -37,6 +37,7 @@ class PassportLinter
       summary: summary(active).merge(proposed_not_counted: summary(proposed.select { |c| c[:status] == "proposed" })),
       criteria: criteria,
       notice: "Results of automated checks only. They are no certification and establish no presumption of conformity.",
+      notices: SoyaContext.new.notices(reports.reject { |_, r| r[:error] }.keys),
       "dpp-criteria": Rails.configuration.x.dpplint.criteria_ref
     }
   end
@@ -162,7 +163,8 @@ class PassportLinter
 
   def validate(structure, passport)
     unless File.file?(File.join(Rails.configuration.x.dpplint.structures_dir, structure))
-      return { error: "SOyA structure #{structure} is not available" }
+      return { error: "SOyA structure #{structure} is not part of this image (dpp-criteria #{Rails.configuration.x.dpplint.criteria_ref}); " \
+                      "dpplint does not fetch structures from SOyA when it checks a passport" }
     end
 
     data = @web_cli.validate(structure, @web_cli.acquire(structure, passport))

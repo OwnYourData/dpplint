@@ -36,7 +36,7 @@ class HomeTest < ActionDispatch::IntegrationTest
     footer = body[%r{<footer>.*</footer>}m]
     assert footer, "footer"
     assert body.index("</main>") < body.index("<footer>"), "footer outside main, so its line spans the window"
-    assert_includes footer, %(Operated by <a href="https://www.ownyourdata.eu/en/">OwnYourData</a>)
+    assert_includes footer, %(<div>Operated by <a href="https://www.ownyourdata.eu/en/">OwnYourData</a></div>)
     assert_includes footer, %(<a href="https://www.ownyourdata.eu/en/imprint/">Imprint</a>)
     assert_includes footer, %(<a href="https://www.ownyourdata.eu/en/privacy-policy/">Privacy</a>)
     assert_includes footer, %(<a href="/api-docs">API</a>)
@@ -44,6 +44,28 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert_includes footer, "The DPP Linter is part of a research project and shares what we currently know; " \
                             "the checks make no claim to be complete and are not a legal assessment."
     assert_includes footer, %(<div class="funding">#{FundingNotice.html}</div>)
+  end
+
+  test "footer is laid out like the DPP Service: operator and links in one row, then notes and funding" do
+    get "/"
+    footer = response.body[%r{<footer>.*</footer>}m]
+    blocks = footer.scan(%r{^    <div(?: class="([a-z]+)")?>}).flatten
+    assert_equal [nil, "legal", "about", "funding"], blocks
+    legal = footer[%r{<div class="legal">.*?</div>}m]
+    assert_equal %w[API Source Imprint Privacy], legal.scan(%r{<a href="[^"]+">([^<]+)</a>}).flatten
+    assert_not_includes footer, "<br>"
+    assert_match(/footer \.about, footer \.funding \{ flex-basis: 100%;/, response.body)
+  end
+
+  test "the page reads a result only from a JSON answer and shows the notices of the check" do
+    get "/"
+    script = response.body[%r{<script>.*</script>}m]
+    assert script, "script"
+    check = script.index('if (!/json/i.test(res.headers.get("Content-Type") || ""))')
+    assert check, "content type is checked"
+    assert check < script.index("await res.json()"), "before the answer is parsed"
+    assert_includes script, '"the server answered HTTP " + res.status + " without a result. Please try again later."'
+    assert_includes script, "(d.notices || []).map("
   end
 
   test "the mark is served as a static file" do
