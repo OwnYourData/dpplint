@@ -2,12 +2,15 @@
 # except didlint, which checks DIDs (DIDLINT_URL). A check waits for didlint at
 # most DIDLINT_TIMEOUT seconds per request and DIDLINT_BUDGET seconds in total.
 # SOYA_CONTEXT.json records which SOyA context the structures of the image were
-# built with (fetched or a cached copy, and from when).
+# built with (fetched or a cached copy, and from when). The start page waits for
+# a check at most CHECK_TIMEOUT seconds (default: the didlint budget plus 20 s
+# for retrieving the passport).
 Rails.application.config.x.dpplint = ActiveSupport::OrderedOptions.new.tap do |c|
   c.soya_web_cli    = ENV.fetch("SOYA_WEB_CLI", "http://127.0.0.1:8080")
   c.didlint         = ENV.fetch("DIDLINT_URL", "https://didlint.ownyourdata.eu")
   c.didlint_timeout = ENV.fetch("DIDLINT_TIMEOUT", "10").to_f
   c.didlint_budget  = ENV.fetch("DIDLINT_BUDGET", "20").to_f
+  c.check_timeout   = ENV.fetch("CHECK_TIMEOUT", (c.didlint_budget + 20).to_s).to_f
   c.criteria_dir    = ENV.fetch("DPP_CRITERIA_DIR", Rails.root.join("criteria").to_s)
   c.structures_dir  = ENV.fetch("DPP_STRUCTURES_DIR", Rails.root.join("structures").to_s)
   c.criteria_ref    = (File.read(Rails.root.join("CRITERIA_REF")).strip rescue "unknown")
