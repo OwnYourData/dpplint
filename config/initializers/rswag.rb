@@ -3,5 +3,5 @@ Rswag::Api.configure do |c|
 end
 
 Rswag::Ui.configure do |c|
-  c.openapi_endpoint "/api-docs/v1/swagger.yaml", "dpplint API v1"
+  c.openapi_endpoint "/api-docs/v1/swagger.yaml", "DPP Linter API v1"
 end
