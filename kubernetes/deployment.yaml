@@ -17,10 +17,17 @@ spec:
       labels:
         app: dpplint
     spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: dpplint
       containers:
       - name: dpplint
-        image: oydeu/dpplint:latest
-        imagePullPolicy: Always
+        image: oydeu/dpplint@sha256:9a967537cfba81b96ad377bff375fa2ccfe63c7d72a97dbbf5cd22f08798a1ce
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
         env:
@@ -40,7 +47,7 @@ spec:
             memory: 1Gi
         readinessProbe:
           httpGet:
-            path: /version
+            path: /ready
             port: 3000
           initialDelaySeconds: 10
           periodSeconds: 5
