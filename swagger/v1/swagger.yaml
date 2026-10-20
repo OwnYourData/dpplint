@@ -59,6 +59,18 @@ paths:
       responses:
         "200":
           description: Version information
+  /ready:
+    get:
+      summary: Whether this instance can check passports
+      description: >-
+        Used as readiness probe. Ready when the SOyA web-cli and the SOyA
+        repository with the structures of the image answer. The result is
+        held and renewed at most every 30 s (every second while not ready).
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Not ready, with the reason
 components:
   schemas:
     Report:

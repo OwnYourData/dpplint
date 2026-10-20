@@ -121,6 +121,11 @@ complete and are not a legal assessment.
   private or link-local ranges are not retrieved.
   `DPPLINT_ALLOW_PRIVATE_NETWORKS=1` lifts this for local development.
 - API documentation: `/api-docs`.
+- `GET /version` names the versions of dpplint, dpp-criteria and the SOyA
+  web-cli. `GET /ready` answers 200 when the instance can check passports
+  (the SOyA web-cli and the SOyA repository with the structures of the image
+  answer) and 503 with the reason when not; the result is held and renewed at
+  most every 30 s, every second while not ready.
 
 The image contains everything it needs at run time: the Rails API, the SOyA
 web-cli (`oydeu/soya-web-cli`) and the criteria and SOyA structures of
@@ -146,15 +151,26 @@ for linux/amd64, like the SOyA web-cli it contains.
 ## Deployment
 
 `kubernetes/` holds the manifests for dpplint.ownyourdata.eu: deployment,
-service, certificate (cert-manager, ClusterIssuer `letsencrypt-prod`) and ingress
-(nginx).
+pod disruption budget, service, certificate (cert-manager, ClusterIssuer
+`letsencrypt-prod`) and ingress (nginx).
 
-The deployment runs two replicas with 16 threads each (`RAILS_MAX_THREADS`).
-Replicas keep no state of their own: every check is answered by one replica
-from the criteria and structures in the image. A replica whose threads are all
-busy fails its readiness probe (`/version`) and is taken out of the ingress
-until it answers again; the liveness probe only checks that the port is open, so
-a busy replica is not restarted.
+The deployment runs two replicas with 16 threads each (`RAILS_MAX_THREADS`),
+spread over different nodes where possible (`topologySpreadConstraints`,
+`ScheduleAnyway`). The pod disruption budget keeps at least one replica
+running while nodes are drained. Replicas keep no state of their own: every
+check is answered by one replica from the criteria and structures in the
+image. A replica whose threads are all busy, or whose SOyA web-cli does not
+answer, fails its readiness probe (`/ready`) and is taken out of the ingress
+until it answers again; the liveness probe only checks that the port is open,
+so a busy replica is not restarted.
+
+The deployment names the image by its digest (`oydeu/dpplint@sha256:…`), so
+that all replicas run the same image and a restart never picks up a newer
+one. The digest of a new image gets into the manifest when the image is
+pushed: `DOCKERHUB=1 ./build.sh` builds and pushes it and writes its digest
+into `kubernetes/deployment.yaml`. The changed manifest is committed and
+applied like any other change. `kubernetes/` is not part of the image, so
+writing the digest does not change the image.
 
 ## Tests
 
