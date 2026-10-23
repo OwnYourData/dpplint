@@ -61,13 +61,40 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_equal "failed", criterion(lint(reference.merge("uniqueProductIdentifier" => long)), "DPP-REG-024")["result"]
   end
 
+  test "value data type that EN 18223 excludes fails" do
+    assert_equal "passed", criterion(lint(reference), "DPP-DAT-026")["result"]
+    passport = reference
+    passport["elements"][0]["elements"][0]["valueDataType"] = "xsd:token"
+    result = criterion(lint(passport), "DPP-DAT-026")
+    assert_equal "failed", result["result"]
+    assert_match(/derived from string/, result["messages"].first["message"])
+  end
+
+  test "identifiers outside ISO/IEC 646 or the URI syntax fail" do
+    assert_equal "passed", criterion(lint(reference), "DPP-ID-015")["result"]
+    passport = reference.merge("uniqueProductIdentifier" => "https://dpp.example.org/01/04012345000016/21/\u00c41")
+    assert_equal "failed", criterion(lint(passport), "DPP-ID-015")["result"], "non-ASCII character"
+    passport = reference.merge("economicOperatorId" => "did:web:example.org:operator 1")
+    assert_equal "failed", criterion(lint(passport), "DPP-ID-015")["result"], "space in a URI"
+    passport = reference.merge("uniqueProductIdentifier" => "https://dpp.example.org/01/04012345000016/21/A%C3%841")
+    assert_equal "passed", criterion(lint(passport), "DPP-ID-015")["result"], "percent-encoded"
+  end
+
+  test "product DID with another method than did:web, did:ethr or did:ebsi gives a warning" do
+    assert_equal "skipped", criterion(lint(reference), "DPP-ID-054")["result"], "product identifier is no DID"
+    result = criterion(lint(reference.merge("uniqueProductIdentifier" => "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK")), "DPP-ID-054")
+    assert_equal "warning", result["result"]
+    assert_match(/did:web, did:ethr or did:ebsi/, result["messages"].first["message"])
+    assert_equal "passed", criterion(lint(reference.merge("uniqueProductIdentifier" => "did:web:dpp.example.org:product:4711")), "DPP-ID-054")["result"]
+  end
+
   test "optional facility identifier is skipped when absent" do
     assert_equal "skipped", criterion(lint(reference), "DPP-ID-010")["result"]
   end
 
   test "checks that request the product identifier need one" do
     result = lint(reference)
-    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016 DPP-SEC-014].each do |id|
+    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016 DPP-SEC-014 DPP-SEC-020].each do |id|
       assert_equal "skipped", criterion(result, id)["result"], id
     end
     assert_equal "rated by dpp-validator from its daily runs", criterion(result, "DPP-ID-002")["reason"]
