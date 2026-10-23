@@ -38,6 +38,29 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_equal "warning", criterion(result, "DPP-DAT-015")["result"]
   end
 
+  test "GTIN with the GS1 prefix 952 for examples gives a warning on the product identifier scheme" do
+    result = criterion(lint(reference), "DPP-CAR-002")
+    assert_equal "warning", result["result"]
+    assert_equal ["warning"], result["messages"].map { |m| m["severity"] }
+    assert_match(/GS1 prefix 952/, result["messages"].first["message"])
+  end
+
+  test "GTIN with another prefix passes the product identifier scheme without a warning" do
+    passport = reference.merge("uniqueProductIdentifier" => "https://dpp.example.org/01/04012345000016/21/000001")
+    assert_equal "passed", criterion(lint(passport), "DPP-CAR-002")["result"]
+    passport = reference.merge("uniqueProductIdentifier" => "https://dpp.example.org/01/95201234567897/21/000001")
+    assert_equal "passed", criterion(lint(passport), "DPP-CAR-002")["result"], "prefix 520 after the indicator digit 9"
+  end
+
+  test "product identifier in the form the EU DPP registry accepts" do
+    assert_equal "passed", criterion(lint(reference), "DPP-REG-024")["result"]
+    result = criterion(lint(reference.merge("uniqueProductIdentifier" => "did:web:dpp.example.org:product:4711")), "DPP-REG-024")
+    assert_equal "failed", result["result"]
+    assert_match(/2000 characters/, result["messages"].first["message"])
+    long = "https://dpp.example.org/01/04012345000016/21/#{'1' * 2000}"
+    assert_equal "failed", criterion(lint(reference.merge("uniqueProductIdentifier" => long)), "DPP-REG-024")["result"]
+  end
+
   test "optional facility identifier is skipped when absent" do
     assert_equal "skipped", criterion(lint(reference), "DPP-ID-010")["result"]
   end
