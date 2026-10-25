@@ -103,14 +103,33 @@ complete and are not a legal assessment.
 - Criteria with `check.type: links` check every `RelatedResource` of the
   passport for the required attributes and send a HEAD request to its URL
   (at most 20 URLs per passport). A URL that does not answer gives a warning.
-- Criteria with `check.type: html` (DPP-SEC-014) request the product
-  identifier with `Accept: text/html` and list the URLs a browser loads without
-  user action while it displays the HTML view (scripts, style sheets, fonts,
-  images, frames, preloads, CSS `url()` and `@import`, meta refresh). With
-  `external_resources: forbidden` every such URL on another host than the
-  passport's fails the criterion. Without an HTML view the result is
-  `skipped` (`no_evidence`). Resources added by scripts at run time are not
-  seen.
+- Criteria with `check.type: html` (DPP-SEC-014, DPP-SEC-021) request the
+  product identifier with `Accept: text/html`. Without an HTML view the result
+  is `skipped` (`no_evidence`).
+  - With `external_resources: forbidden` dpplint lists the URLs a browser loads
+    without user action while it displays the HTML view (scripts, style
+    sheets, fonts, images, frames, preloads, CSS `url()` and `@import`, meta
+    refresh); every such URL on another host than the passport's fails the
+    criterion. Resources added by scripts at run time are not seen.
+  - With `device_features: forbidden` dpplint searches, without running any
+    script, the inline scripts, event handler attributes and `javascript:`
+    URLs of the HTML view and the scripts it loads from its own host (at most
+    10, the first 2 MB of each) for browser interfaces that use functions of
+    the reader's device (location, camera, microphone, notifications,
+    contacts, sensors, network information and others), and the markup for
+    frames granted such permissions, file inputs with `capture` and permission
+    elements. Every finding fails the criterion. Code assembled at run time,
+    obfuscated or loaded by a script, and scripts from other hosts, are not
+    seen; an interface name in a comment or string counts.
+- Criteria with `check.type: element_ids` (DPP-DAT-017, DPP-DAT-021) check
+  that elementIds are unique. In the expanded full serialization dpplint
+  compares the elementIds within every array of data elements (`unique:
+  level`, a repeated elementId fails) or across the whole passport (`unique:
+  passport`, an elementId at two places gives a warning; the items of a
+  MultiValuedDataElement count as one place). In the compressed serialization
+  `level` looks for a member name repeated within one JSON object of the
+  passport as delivered (the response, or the posted body), and `passport` is
+  `skipped`.
 - Criteria whose condition does not hold are reported as `skipped`.
 - Every `skipped` criterion carries a `reason` and a `reason_code`
   (`not_applicable`, `no_evidence`, `not_evaluated`, … as defined under

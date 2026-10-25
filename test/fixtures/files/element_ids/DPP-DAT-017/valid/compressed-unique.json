@@ -1,0 +1,27 @@
+{
+  "digitalProductPassportId": "https://dpp.example.org/dpp/1",
+  "uniqueProductIdentifier": "https://dpp.example.org/01/09520123456788/21/1",
+  "granularity": "item",
+  "dppSchemaVersion": "EN 18223:2026",
+  "dppStatus": "Active",
+  "lastUpdated": "2026-10-25T00:00:00Z",
+  "economicOperatorId": "did:web:operator.example.org",
+  "performanceMetrics": {
+    "maxPressure": 750.0,
+    "isFireResistant": true,
+    "efficiencyRatings": [
+      0.95,
+      0.92
+    ]
+  },
+  "componentParts": [
+    {
+      "partId": "A-101",
+      "material": "Steel"
+    },
+    {
+      "partId": "B-202",
+      "material": "Recycled plastic"
+    }
+  ]
+}

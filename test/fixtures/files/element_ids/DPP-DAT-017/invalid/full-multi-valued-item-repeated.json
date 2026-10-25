@@ -1,0 +1,41 @@
+{
+  "digitalProductPassportId": "https://dpp.example.org/dpp/1",
+  "uniqueProductIdentifier": "https://dpp.example.org/01/09520123456788/21/1",
+  "granularity": "item",
+  "dppSchemaVersion": "EN 18223:2026",
+  "dppStatus": "Active",
+  "lastUpdated": "2026-10-25T00:00:00Z",
+  "economicOperatorId": "did:web:operator.example.org",
+  "elements": [
+    {
+      "elementId": "EnergyPerformance",
+      "objectType": "DataElementCollection",
+      "elements": [
+        {
+          "elementId": "efficiencyRatings",
+          "objectType": "MultiValuedDataElement",
+          "value": [
+            {
+              "elementId": "efficiencyRating1",
+              "objectType": "SingleValuedDataElement",
+              "valueDataType": "xsd:decimal",
+              "value": 0.95
+            },
+            {
+              "elementId": "efficiencyRating2",
+              "objectType": "SingleValuedDataElement",
+              "valueDataType": "xsd:decimal",
+              "value": 0.92
+            },
+            {
+              "elementId": "efficiencyRating2",
+              "objectType": "SingleValuedDataElement",
+              "valueDataType": "xsd:decimal",
+              "value": 0.88
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

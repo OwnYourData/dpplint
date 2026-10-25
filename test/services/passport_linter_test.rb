@@ -156,4 +156,25 @@ class PassportLinterTest < ActiveSupport::TestCase
     assert_equal "skipped", result[:result]
     assert_match(/uses a feature outside the portable subset of CRITERIA-FORMAT.md that dpplint does not evaluate \(lookahead\)/, result[:reason])
   end
+
+  test "element_ids criteria check the passport as delivered: the response bytes, or the posted body" do
+    text = File.read(Rails.root.join("test/fixtures/files/element_ids/DPP-DAT-017/invalid/compressed-repeated-member.json"))
+    check = { "type" => "element_ids", "unique" => "level" }
+    linter = -> { PassportLinter.new(catalogue: FakeCatalogue.new([criterion(check).merge("id" => "DPP-DAT-017")])) }
+    posted = linter.call.run(passport: JSON.parse(text), source: text)[:criteria].first
+    assert_equal "failed", posted[:result]
+    assert_match(/maxPressure 2 times/, posted[:messages].first[:message])
+    assert_equal "failed", linter.call.run(passport: JSON.parse(text), raw: text.b)[:criteria].first[:result]
+    without = linter.call.run(passport: JSON.parse(text))[:criteria].first
+    assert_equal %w[skipped not_evaluated], without.values_at(:result, :reason_code)
+  end
+
+  test "a warning of an element_ids criterion leaves it counted as passed" do
+    text = File.read(Rails.root.join("test/fixtures/files/element_ids/DPP-DAT-021/warning/full-same-id-in-two-collections.json"))
+    check = { "type" => "element_ids", "unique" => "passport" }
+    report = PassportLinter.new(catalogue: FakeCatalogue.new([criterion(check).merge("id" => "DPP-DAT-021")]))
+                           .run(passport: JSON.parse(text))
+    assert_equal "warning", report[:criteria].first[:result]
+    assert_equal "1 of 1 automated checks passed", report[:summary][:text]
+  end
 end

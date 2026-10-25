@@ -9,7 +9,10 @@
 # check.type proof verify an integrity proof in the passport; criteria with
 # check.type links check the related resources it links to; criteria with
 # check.type html check the HTML view of the passport (needs a product
-# identifier, like resolve).
+# identifier, like resolve); criteria with check.type element_ids check that
+# the elementIds of the passport are unique (in the compressed serialization
+# on `source`, the passport as delivered: the bytes of the response or of the
+# posted body).
 #
 # A check ends within its time limit (CheckDeadline): a criterion whose
 # requests are cut off by it, or that would need a request after it, is
@@ -28,9 +31,10 @@ class PassportLinter
     @didlint = didlint
   end
 
-  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false, raw: nil, jws_unchecked: nil)
+  def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false, raw: nil, jws_unchecked: nil, source: nil)
     @product_id = product_id
     @raw = raw
+    @source = source || raw
     @jws = jws
     @jws_only = jws_only
     @jws_unchecked = jws_unchecked
@@ -106,7 +110,7 @@ class PassportLinter
 
     return resolve(base, check) if check["type"] == "resolve"
     return html(base, check) if check["type"] == "html"
-    unless %w[shacl did proof links].include?(check["type"])
+    unless %w[shacl did proof links element_ids].include?(check["type"])
       return skip(base, "check type #{check['type']} is not implemented in this version", "not_evaluated")
     end
     return skip(base, "passport could not be retrieved", "not_evaluated") if passport.nil?
@@ -119,6 +123,7 @@ class PassportLinter
     return did(base, check, passport) if check["type"] == "did"
     return proof(base, check, passport) if check["type"] == "proof"
     return links(base, check, passport) if check["type"] == "links"
+    return element_ids(base, check, passport) if check["type"] == "element_ids"
 
     return skip(base, "no shapes available for #{check['shapes_select']}", "not_evaluated") unless check["structure"]
 
@@ -174,6 +179,13 @@ class PassportLinter
     base.merge(result: result_for(outcome.messages), messages: outcome.messages)
   rescue Didlint::Unavailable => e
     skip(base, e.message, "not_evaluated")
+  end
+
+  def element_ids(base, check, passport)
+    outcome = ElementIdsCheck.new(check, passport, source: @source).outcome
+    return skip(base, outcome.skipped, outcome.code) if outcome.skipped
+
+    base.merge(result: result_for(outcome.messages), messages: outcome.messages)
   end
 
   def links(base, check, passport)
