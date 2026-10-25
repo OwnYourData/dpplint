@@ -14,6 +14,12 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     JSON.parse(response.body)
   end
 
+  def lint_text(text)
+    post "/api/v1/validate", params: text, headers: { "Content-Type" => "application/json" }
+    assert_response :success
+    JSON.parse(response.body)
+  end
+
   def criterion(result, id) = result["criteria"].find { |c| c["id"] == id }
 
   test "reference passport passes all structure checks" do
@@ -88,13 +94,40 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     assert_equal "passed", criterion(lint(reference.merge("uniqueProductIdentifier" => "did:web:dpp.example.org:product:4711")), "DPP-ID-054")["result"]
   end
 
+  test "elementIds of the reference passport are unique at each level and in the whole passport" do
+    result = lint(reference)
+    assert_equal "passed", criterion(result, "DPP-DAT-017")["result"]
+    assert_equal "passed", criterion(result, "DPP-DAT-021")["result"]
+  end
+
+  test "an elementId repeated within a collection fails, one used in two collections gives a warning" do
+    passport = reference
+    collection = passport["elements"].first
+    collection["elements"] << collection["elements"].first.merge("value" => "other")
+    result = lint(passport)
+    assert_equal "failed", criterion(result, "DPP-DAT-017")["result"]
+    assert_match(/ModelIdentifier 2 times in ProductIdentification/, criterion(result, "DPP-DAT-017")["messages"].first["message"])
+
+    passport = reference
+    passport["elements"].last["elements"] << passport["elements"].first["elements"].first
+    result = lint(passport)
+    assert_equal "passed", criterion(result, "DPP-DAT-017")["result"]
+    assert_equal "warning", criterion(result, "DPP-DAT-021")["result"]
+  end
+
+  test "a compressed passport posted with a repeated member name fails DPP-DAT-017" do
+    result = lint_text(file_fixture("element_ids/DPP-DAT-017/invalid/compressed-repeated-member.json").read)
+    assert_equal "failed", criterion(result, "DPP-DAT-017")["result"]
+    assert_equal %w[skipped not_evaluated], criterion(result, "DPP-DAT-021").values_at("result", "reason_code")
+  end
+
   test "optional facility identifier is skipped when absent" do
     assert_equal "skipped", criterion(lint(reference), "DPP-ID-010")["result"]
   end
 
   test "checks that request the product identifier need one" do
     result = lint(reference)
-    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016 DPP-SEC-014 DPP-SEC-020].each do |id|
+    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016 DPP-SEC-014 DPP-SEC-020 DPP-SEC-021].each do |id|
       assert_equal "skipped", criterion(result, id)["result"], id
     end
     assert_equal "rated by dpp-validator from its daily runs", criterion(result, "DPP-ID-002")["reason"]

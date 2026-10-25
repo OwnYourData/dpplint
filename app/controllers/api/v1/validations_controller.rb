@@ -24,7 +24,7 @@ module Api
         passport = JSON.parse(request.raw_post)
         return render(json: { error: "body is not a JSON object" }, status: :unprocessable_entity) unless passport.is_a?(Hash)
 
-        render json: PassportLinter.new.run(passport: passport)
+        render json: PassportLinter.new.run(passport: passport, source: request.raw_post)
       rescue JSON::ParserError => e
         render json: { error: "invalid JSON: #{e.message}" }, status: :unprocessable_entity
       end
