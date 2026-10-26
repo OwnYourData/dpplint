@@ -103,8 +103,8 @@ complete and are not a legal assessment.
 - Criteria with `check.type: links` check every `RelatedResource` of the
   passport for the required attributes and send a HEAD request to its URL
   (at most 20 URLs per passport). A URL that does not answer gives a warning.
-- Criteria with `check.type: html` (DPP-SEC-014, DPP-SEC-021) request the
-  product identifier with `Accept: text/html`. Without an HTML view the result
+- Criteria with `check.type: html` (DPP-SEC-014, DPP-SEC-021, DPP-DAT-020)
+  request the product identifier with `Accept: text/html`. Without an HTML view the result
   is `skipped` (`no_evidence`).
   - With `external_resources: forbidden` dpplint lists the URLs a browser loads
     without user action while it displays the HTML view (scripts, style
@@ -121,6 +121,13 @@ complete and are not a legal assessment.
     elements. Every finding fails the criterion. Code assembled at run time,
     obfuscated or loaded by a script, and scripts from other hosts, are not
     seen; an interface name in a comment or string counts.
+  - With `markup_errors: forbidden` dpplint posts the HTML view, as received
+    and with the media type and charset of the response, to the Nu Html
+    Checker that it runs itself (`NU_CHECKER_URL`; see "Deployment"). It never
+    sends the document to a public instance. Every message of type `error`
+    fails the criterion; warnings and other `info` messages do not count.
+    Without a checker, or if the checker does not answer or cannot check the
+    document, the criterion is `skipped` (`not_evaluated`).
 - Criteria with `check.type: element_ids` (DPP-DAT-017, DPP-DAT-021) check
   that elementIds are unique. In the expanded full serialization dpplint
   compares the elementIds within every array of data elements (`unique:
@@ -167,6 +174,16 @@ default is `main`. Branch and tag names are resolved to their commit first, so
 that the Docker build cache never reuses an older dpp-criteria. `GET /version` shows the commit in use. The image is built
 for linux/amd64, like the SOyA web-cli it contains.
 
+Without `NU_CHECKER_URL` the criteria that need the Nu Html Checker are
+skipped. To run them locally, start the checker on a network of its own next
+to dpplint:
+
+```
+docker network create dpplint
+docker run --rm -d --name nu-html-checker --network dpplint ghcr.io/validator/validator@sha256:8f21030474e68e06905cfa801b37376e99c0e37867c653c5b6cd7e2dcaf3f503
+docker run --rm --platform linux/amd64 --network dpplint -p 3000:3000 -e NU_CHECKER_URL=http://nu-html-checker:8888/ oydeu/dpplint
+```
+
 ## Deployment
 
 `kubernetes/` holds the manifests for dpplint.ownyourdata.eu: deployment,
@@ -182,6 +199,15 @@ image. A replica whose threads are all busy, or whose SOyA web-cli does not
 answer, fails its readiness probe (`/ready`) and is taken out of the ingress
 until it answers again; the liveness probe only checks that the port is open,
 so a busy replica is not restarted.
+
+Each pod also runs the Nu Html Checker (`ghcr.io/validator/validator`, MIT
+licence) as a second container, named by its digest like the dpplint image.
+It listens on 127.0.0.1:8888 only, so it is reachable from dpplint in the same
+pod and from nowhere else, and it runs with a heap of 192 MB within a memory
+limit of 512 Mi. dpplint finds it through `NU_CHECKER_URL`. The pod's
+readiness does not depend on it: if the checker is down or still starting,
+only the criteria that need it are skipped. Its liveness probe restarts it if
+it stops answering.
 
 The deployment names the image by its digest (`oydeu/dpplint@sha256:…`), so
 that all replicas run the same image and a restart never picks up a newer

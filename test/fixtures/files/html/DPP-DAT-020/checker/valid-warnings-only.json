@@ -1,0 +1,27 @@
+{
+    "version": "26.10.12 (973e40b)",
+    "messages": [
+        {
+            "type": "info",
+            "lastLine": 6,
+            "lastColumn": 31,
+            "firstColumn": 1,
+            "subType": "warning",
+            "message": "The “type” attribute is unnecessary for JavaScript resources.",
+            "extract": "l</title>\n<script type=\"text/javascript\">docume",
+            "hiliteStart": 10,
+            "hiliteLength": 31
+        },
+        {
+            "type": "info",
+            "lastLine": 11,
+            "lastColumn": 9,
+            "firstColumn": 1,
+            "subType": "warning",
+            "message": "Section lacks heading. Consider using “h2”-“h6” elements to add identifying headings to all sections, or else use a “div” element instead for any cases where no heading is needed.",
+            "extract": "rill</h1>\n<section>\n<p>Ra",
+            "hiliteStart": 10,
+            "hiliteLength": 9
+        }
+    ]
+}

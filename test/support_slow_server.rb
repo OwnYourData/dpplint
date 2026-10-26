@@ -1,9 +1,10 @@
 require "socket"
 
 # A plain HTTP server on 127.0.0.1 for tests of time limits. The block gets
-# the request line and header lines and returns [delay, response]: the
-# response is sent after `delay` seconds; nil means the server never answers
-# and waits until the client gives up. `open_requests` counts the requests
+# the request line and header lines (and the body, if the request has a
+# Content-Length) and returns [delay, response]: the response is sent after
+# `delay` seconds; nil means the server never answers and waits until the
+# client gives up. `open_requests` counts the requests
 # the client has not given up yet, so a test can see that nothing of a check
 # keeps running after it.
 class SlowServer
@@ -54,8 +55,10 @@ class SlowServer
       while (line = c.gets) && line != "\r\n"
         lines << line.chomp
       end
+      length = lines.grep(/\Acontent-length:/i).first.to_s.split(":", 2).last.to_i
+      body = length.positive? ? c.read(length) : nil
       @lock.synchronize { @requests << lines }
-      delay, response = @handler.call(lines)
+      delay, response = @handler.call(lines, body)
       if response
         sleep delay.to_f
         c.write(response)

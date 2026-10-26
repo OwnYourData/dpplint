@@ -20,6 +20,12 @@ require "nokogiri"
 # the first MAX_SCRIPT_BYTES of each; a script that cannot be retrieved is not
 # checked), and in the markup for frames granted device permissions
 # (DEVICE_PERMISSIONS), file inputs with capture and permission elements.
+#
+# markup_errors: forbidden sends the document as received to the Nu Html
+# Checker that dpplint runs itself (NuChecker) and reports every message of
+# type error; warnings and other info messages are not counted. Without a
+# checker, or if it cannot check the document, the criterion is skipped
+# (not_evaluated).
 class HtmlCheck
   Outcome = Struct.new(:skipped, :code, :messages, keyword_init: true)
 
@@ -44,6 +50,7 @@ class HtmlCheck
   MAX_SCRIPTS = 10
   MAX_SCRIPT_BYTES = 2 * 1024 * 1024
   MAX_FINDINGS = 10
+  MAX_MESSAGE_LENGTH = 300
 
   SRC_ELEMENTS = %w[script img iframe frame embed audio video source track].freeze
   SRCSET_ELEMENTS = %w[img source].freeze
@@ -53,10 +60,11 @@ class HtmlCheck
   CSS_IMPORT = /@import\s+(?:"([^"]*)"|'([^']*)')/i
   MAX_LISTED = 10
 
-  def initialize(check, product_id, resolver)
+  def initialize(check, product_id, resolver, nu_checker: nil)
     @check = check
     @product_id = product_id
     @resolver = resolver
+    @nu_checker = nu_checker
   end
 
   def outcome
@@ -68,7 +76,10 @@ class HtmlCheck
     messages = []
     messages << external_message(res) if @check["external_resources"] == "forbidden"
     messages << device_message(res) if @check["device_features"] == "forbidden"
+    messages << markup_message(res) if @check["markup_errors"] == "forbidden"
     Outcome.new(messages: messages.compact)
+  rescue NuChecker::Unavailable => e
+    Outcome.new(skipped: e.message, code: "not_evaluated")
   end
 
   # Device interfaces found in a piece of script: [[label, matched text], …].
@@ -218,6 +229,25 @@ class HtmlCheck
 
       self.class.device_uses(res.body.to_s.byteslice(0, MAX_SCRIPT_BYTES).to_s.dup.force_encoding(Encoding::UTF_8).scrub).map { |label, use| "#{label} (#{use} in #{url})" }
     end
+  end
+
+  # Errors of the Nu Html Checker, with their line: "line 12: message".
+  def markup_message(res)
+    checker = @nu_checker || NuChecker.new
+    errors = checker.messages(res.body, res.content_type.presence || "text/html").select { |m| m["type"] == "error" }
+    return nil if errors.empty?
+
+    listed = errors.first(MAX_FINDINGS).map { |m| markup_error(m) }
+    more = errors.size > MAX_FINDINGS ? " and #{errors.size - MAX_FINDINGS} more" : ""
+    { severity: "violation",
+      message: "the Nu Html Checker reports #{errors.size} error(s) in the HTML view: #{listed.join('; ')}#{more}" }
+  end
+
+  def markup_error(message)
+    text = message["message"].to_s.gsub(/\s+/, " ").strip
+    text = "#{text[0, MAX_MESSAGE_LENGTH - 1]}…" if text.length > MAX_MESSAGE_LENGTH
+    line = message["lastLine"] || message["firstLine"]
+    line ? "line #{line}: #{text}" : text
   end
 
   def describe(res)

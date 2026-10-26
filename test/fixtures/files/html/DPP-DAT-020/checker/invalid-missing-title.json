@@ -1,0 +1,15 @@
+{
+    "version": "26.10.12 (973e40b)",
+    "messages": [
+        {
+            "type": "error",
+            "lastLine": 5,
+            "lastColumn": 7,
+            "firstColumn": 1,
+            "message": "Element “head” is missing a required instance of child element “title”.",
+            "extract": "=\"utf-8\">\n</head>\n<body",
+            "hiliteStart": 10,
+            "hiliteLength": 7
+        }
+    ]
+}

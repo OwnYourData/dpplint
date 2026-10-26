@@ -23,12 +23,14 @@ class PassportLinter
   REASON_CODES = %w[not_applicable not_implemented no_evidence needs_credentials not_sent unreachable not_evaluated].freeze
 
   def initialize(catalogue: CriteriaCatalogue.new, deadline: CheckDeadline.new, web_cli: SoyaWebCli.new(deadline: deadline),
-                 resolver: HttpResolver.new(deadline: deadline), didlint: Didlint.new(deadline: deadline))
+                 resolver: HttpResolver.new(deadline: deadline), didlint: Didlint.new(deadline: deadline),
+                 nu_checker: NuChecker.new(deadline: deadline))
     @catalogue = catalogue
     @deadline = deadline
     @web_cli = web_cli
     @resolver = resolver
     @didlint = didlint
+    @nu_checker = nu_checker
   end
 
   def run(passport:, product_id: nil, retrieval: nil, jws: nil, jws_only: false, raw: nil, jws_unchecked: nil, source: nil)
@@ -154,7 +156,7 @@ class PassportLinter
   def html(base, check)
     return skip(base, "needs a product identifier", "not_evaluated") if @product_id.blank?
 
-    outcome = HtmlCheck.new(check, @product_id, @resolver).outcome
+    outcome = HtmlCheck.new(check, @product_id, @resolver, nu_checker: @nu_checker).outcome
     return skip(base, outcome.skipped, outcome.code) if outcome.skipped
 
     base.merge(result: result_for(outcome.messages), messages: outcome.messages)
