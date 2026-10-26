@@ -48,7 +48,9 @@ class ValidationsTest < ActionDispatch::IntegrationTest
     result = criterion(lint(reference), "DPP-CAR-002")
     assert_equal "warning", result["result"]
     assert_equal ["warning"], result["messages"].map { |m| m["severity"] }
-    assert_match(/GS1 prefix 952/, result["messages"].first["message"])
+    assert_match(/\AThe GTIN of the GS1 Digital Link carries the GS1 prefix 952,/, result["messages"].first["message"])
+    passport = reference.merge("uniqueProductIdentifier" => "https://dpp.example.org/01/00000095212340/21/000001")
+    assert_equal "warning", criterion(lint(passport), "DPP-CAR-002")["result"], "GTIN-8 with the GS1-8 prefix 952, padded to 14 digits"
   end
 
   test "GTIN with another prefix passes the product identifier scheme without a warning" do

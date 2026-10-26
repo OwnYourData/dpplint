@@ -217,6 +217,30 @@ into `kubernetes/deployment.yaml`. The changed manifest is committed and
 applied like any other change. `kubernetes/` is not part of the image, so
 writing the digest does not change the image.
 
+The Nu Html Checker in the manifest is version 26.10.12. Its digest is
+compared with the latest release once a month, and at once when a security
+notice concerns the checker or its image:
+
+```
+docker buildx imagetools inspect ghcr.io/validator/validator:latest
+```
+
+If the digest shown there differs from the one in `kubernetes/deployment.yaml`,
+the checker is updated in one pull request:
+
+1. Write the new digest into `kubernetes/deployment.yaml` and into
+   `test/fixtures/files/html/DPP-DAT-020/README.md`, and the new version into
+   both READMEs.
+2. Record the answers of the new checker to the test vectors again, as that
+   README describes, and run the test suite. Every file in `valid/` must still
+   have no error and every file in `invalid/` at least one; if a new rule of
+   the checker moves a vector, the pull request says which and why.
+3. Check the HTML views of the example passports with the new checker before
+   the manifest is applied.
+
+The dpplint image does not change for this; the manifest is applied like any
+other change.
+
 ## Tests
 
 ```
