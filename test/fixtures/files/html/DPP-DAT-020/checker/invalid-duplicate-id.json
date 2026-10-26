@@ -1,0 +1,26 @@
+{
+    "version": "26.10.12 (973e40b)",
+    "messages": [
+        {
+            "type": "error",
+            "lastLine": 10,
+            "lastColumn": 22,
+            "firstColumn": 1,
+            "message": "Duplicate ID “product”.",
+            "extract": " A60</h1>\n<section id=\"product\">\n<h2>E",
+            "hiliteStart": 10,
+            "hiliteLength": 22
+        },
+        {
+            "type": "info",
+            "lastLine": 9,
+            "lastColumn": 17,
+            "firstColumn": 1,
+            "subType": "warning",
+            "message": "The first occurrence of ID “product” was here.",
+            "extract": "y>\n<main>\n<h1 id=\"product\">Lamp A",
+            "hiliteStart": 10,
+            "hiliteLength": 17
+        }
+    ]
+}

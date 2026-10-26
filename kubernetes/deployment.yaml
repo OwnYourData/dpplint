@@ -26,7 +26,7 @@ spec:
             app: dpplint
       containers:
       - name: dpplint
-        image: oydeu/dpplint@sha256:c7cc08a926cf261d3fd3321aaa851343118f3e810ebd0a763312ec21050e1db8
+        image: oydeu/dpplint@sha256:30f7b99950874ba357455baf42e68ad96968db9f65246e73f559300904f07414
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
@@ -39,6 +39,8 @@ spec:
           value: https://didlint.ownyourdata.eu
         - name: RAILS_MAX_THREADS
           value: "16"
+        - name: NU_CHECKER_URL
+          value: http://127.0.0.1:8888/
         resources:
           requests:
             cpu: 100m
@@ -56,6 +58,32 @@ spec:
         livenessProbe:
           tcpSocket:
             port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+      - name: nu-html-checker
+        image: ghcr.io/validator/validator@sha256:8f21030474e68e06905cfa801b37376e99c0e37867c653c5b6cd7e2dcaf3f503
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: BIND_ADDRESS
+          value: 127.0.0.1
+        - name: JAVA_TOOL_OPTIONS
+          value: -Xmx192m -Xss512k
+        resources:
+          requests:
+            cpu: 50m
+            memory: 320Mi
+          limits:
+            memory: 512Mi
+        livenessProbe:
+          exec:
+            command:
+            - wget
+            - --no-verbose
+            - --tries=1
+            - --spider
+            - http://127.0.0.1:8888/
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5

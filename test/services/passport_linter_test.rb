@@ -177,4 +177,21 @@ class PassportLinterTest < ActiveSupport::TestCase
     assert_equal "warning", report[:criteria].first[:result]
     assert_equal "1 of 1 automated checks passed", report[:summary][:text]
   end
+
+  test "html criteria with markup_errors use the Nu Html Checker of the linter, and are skipped without one" do
+    check = { "type" => "html", "markup_errors" => "forbidden" }
+    checker = SlowServer.new { [0, SlowServer.http(200, '{"messages":[{"type":"error","lastLine":3,"message":"Stray end tag “p”."}]}')] }
+    linter = lambda do |nu|
+      PassportLinter.new(catalogue: FakeCatalogue.new([criterion(check).merge("id" => "DPP-DAT-020")]),
+                         resolver: FakeResolver.new("text/html" => HTML), nu_checker: nu).run(passport: nil, product_id: UPI)
+    end
+    failed = linter.call(NuChecker.new(checker.url("/")))[:criteria].first
+    assert_equal "failed", failed[:result]
+    assert_equal "the Nu Html Checker reports 1 error(s) in the HTML view: line 3: Stray end tag “p”.", failed[:messages].first[:message]
+    skipped = linter.call(NuChecker.new(""))[:criteria].first
+    assert_equal %w[skipped not_evaluated], skipped.values_at(:result, :reason_code)
+    assert_equal "no Nu Html Checker is configured for this instance", skipped[:reason]
+  ensure
+    checker&.stop
+  end
 end

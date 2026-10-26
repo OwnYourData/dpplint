@@ -1,0 +1,15 @@
+{
+    "version": "26.10.12 (973e40b)",
+    "messages": [
+        {
+            "type": "error",
+            "lastLine": 9,
+            "lastColumn": 26,
+            "firstColumn": 1,
+            "message": "CSS: “color”: “bluish” is not a “color” value.",
+            "extract": "y>\n<main>\n<h1 style=\"color: bluish\">Lamp A",
+            "hiliteStart": 10,
+            "hiliteLength": 26
+        }
+    ]
+}

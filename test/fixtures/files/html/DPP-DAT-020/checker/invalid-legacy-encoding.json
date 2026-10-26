@@ -1,0 +1,19 @@
+{
+    "version": "26.10.12 (973e40b)",
+    "messages": [
+        {
+            "type": "error",
+            "message": "Legacy encoding “windows-1252” used. Documents must use UTF-8."
+        },
+        {
+            "type": "error",
+            "lastLine": 4,
+            "lastColumn": 29,
+            "firstColumn": 1,
+            "message": "The only allowed value for the “charset” attribute for the “meta” element is “utf-8”.",
+            "extract": "\">\n<head>\n<meta charset=\"windows-1252\">\n<titl",
+            "hiliteStart": 10,
+            "hiliteLength": 29
+        }
+    ]
+}

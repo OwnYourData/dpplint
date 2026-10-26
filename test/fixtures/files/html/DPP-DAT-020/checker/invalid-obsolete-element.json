@@ -1,0 +1,15 @@
+{
+    "version": "26.10.12 (973e40b)",
+    "messages": [
+        {
+            "type": "error",
+            "lastLine": 8,
+            "lastColumn": 8,
+            "firstColumn": 1,
+            "message": "The “center” element is obsolete. Use CSS instead.",
+            "extract": "d>\n<body>\n<center>\n<h1>L",
+            "hiliteStart": 10,
+            "hiliteLength": 8
+        }
+    ]
+}

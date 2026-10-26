@@ -127,7 +127,7 @@ class ValidationsTest < ActionDispatch::IntegrationTest
 
   test "checks that request the product identifier need one" do
     result = lint(reference)
-    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016 DPP-SEC-014 DPP-SEC-020 DPP-SEC-021].each do |id|
+    %w[DPP-ID-001 DPP-ID-013 DPP-DAT-003 DPP-DAT-016 DPP-DAT-020 DPP-SEC-014 DPP-SEC-020 DPP-SEC-021].each do |id|
       assert_equal "skipped", criterion(result, id)["result"], id
     end
     assert_equal "rated by dpp-validator from its daily runs", criterion(result, "DPP-ID-002")["reason"]
