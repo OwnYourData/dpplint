@@ -250,6 +250,32 @@ docker run --rm --platform linux/amd64 oydeu/dpplint test
 The suite includes the JavaScript tests of the start page
 (`test/javascript`), which run with the node of the image.
 
+## Related tools
+
+These repositories and services of OwnYourData belong together. Each is a
+project of its own; the list shows how they depend on each other.
+
+- [dpp-criteria](https://github.com/OwnYourData/dpp-criteria) – the criteria
+  and SOyA structures that dpplint checks. The image contains them at a fixed
+  commit; `GET /version` names it.
+- [dpp-validator](https://github.com/OwnYourData/dpp-validator) – runs the
+  service criteria against the listed DPP services every day and calls the
+  API of dpplint for their example passports; results at
+  <https://ownyourdata.github.io/dpp-validator/>.
+- [DIDlint](https://github.com/OwnYourData/didlint) – validates DID
+  documents, at <https://didlint.ownyourdata.eu>; dpplint calls it for the
+  DIDs in a passport (see "How it works").
+- [SOyA](https://ownyourdata.github.io/soya/)
+  ([source](https://github.com/OwnYourData/soya)) – dpplint validates
+  passports with the SOyA web-cli contained in its image.
+- [OYDID](https://ownyourdata.github.io/oydid/)
+  ([source](https://github.com/OwnYourData/oydid)) – the DID method
+  `did:oyd`; DIDlint resolves `did:oyd` through the OYDID resolver.
+
+OwnYourData also operates one of the DPP services whose passports are checked
+in the daily runs, the OwnYourData DPP Service; its passports go through the
+same checks as every other passport.
+
 ## Funding
 
 <!-- funding:begin -->
