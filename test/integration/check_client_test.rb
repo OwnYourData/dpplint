@@ -12,3 +12,14 @@ class CheckClientTest < ActiveSupport::TestCase
     assert_match(/^# pass [1-9]\d*$/, out)
   end
 end
+
+# The click identifiers of the start page (app/javascript/click_ids.js) have
+# their own tests in JavaScript, run with node as part of the suite.
+class ClickIdsTest < ActiveSupport::TestCase
+  test "the JavaScript tests of the click identifiers pass" do
+    out, status = Open3.capture2e("node", "--test", "--test-reporter=tap", Rails.root.join("test/javascript/click_ids.test.js").to_s)
+    assert status.success?, out
+    assert_match(/^# fail 0$/, out)
+    assert_match(/^# pass [1-9]\d*$/, out)
+  end
+end

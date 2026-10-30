@@ -241,6 +241,63 @@ the checker is updated in one pull request:
 The dpplint image does not change for this; the manifest is applied like any
 other change.
 
+## Consent banner and conversion
+
+OwnYourData advertises the DPP Linter with Google Ads. With the visitor's
+consent, the start page measures whether a visit that started with an ad leads
+to a check. Without configuration the feature is off: no banner, no script, no
+"Cookie settings" link and no request to Google.
+
+| Variable | Value |
+|---|---|
+| `GOOGLE_ADS_ID` | Conversion ID of the Google Ads account, `AW-` followed by digits. Empty or malformed: off. |
+| `GOOGLE_ADS_LABEL_LINTER_CHECK` | Conversion label of a completed check (the part of `send_to` after the slash). Without a valid label the banner still works, but nothing is measured. |
+
+- With `GOOGLE_ADS_ID` set, the start page embeds `/consent.js`
+  (`app/javascript/consent.js`, adapted from the DPP Service) and shows
+  "Cookie settings" in the footer. Without it `/consent.js` is an empty script.
+- Before the visitor decides, nothing is loaded from Google. The banner offers
+  "Decline" and "Accept" in the same style; the choice is kept in
+  `localStorage` (`oyd-consent`) for twelve months, and "Cookie settings"
+  opens the banner again. Declining after accepting deletes the `_gcl_` and
+  `_gac_` cookies on the host and its parent domains and reloads the page
+  without the tag.
+- After "Accept", Google Consent Mode v2 is set (everything denied by default,
+  then `ad_storage` and `ad_user_data` granted; `ad_personalization` and
+  `analytics_storage` stay denied), ad personalisation signals are switched off
+  and `gtag.js` is loaded for the ID. The tag is not configured for the ID (no
+  `gtag("config")`): no page views, no Google Analytics, no remarketing, no
+  enhanced conversions.
+- A completed check (the API answered with a result, whatever the result) sends
+  one conversion. A check that cannot be run sends none.
+- No user data goes to Google. The conversion reports the address of the start
+  page with its ad click identifier (`gclid`, `gbraid`, `wbraid`) but without
+  the product identifier, and only the origin of the referrer
+  (`app/javascript/click_ids.js`); the result is not sent either. The start
+  page keeps the click identifier in its address when it adds the product
+  identifier, so that the conversion can be attributed to the ad without a
+  configured tag and without help from the server.
+- The API documentation loads no web fonts from Google
+  (`app/views/rswag/ui/home/index.html.erb`, the template of rswag-ui without
+  them).
+
+The privacy policy is that of the DPP Service:
+<https://dpp-service.ownyourdata.eu/privacy>.
+
+`test/integration/consent_test.rb` checks the server side.
+`test/browser/consent_check.mjs` checks a running instance in a browser
+(Node.js and Playwright); requests to Google are blocked, so no conversion
+reaches Google:
+
+```
+node test/browser/consent_check.mjs https://dpplint.ownyourdata.eu --no-id
+node test/browser/consent_check.mjs http://localhost:3000 --screenshots tmp/consent
+```
+
+The first form is for an instance without `GOOGLE_ADS_ID`. With
+`--inspect-tag` the tag itself is loaded from Google (everything else stays
+blocked) and the check also reads the conversion request it would send.
+
 ## Tests
 
 ```

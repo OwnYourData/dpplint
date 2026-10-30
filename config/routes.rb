@@ -10,6 +10,7 @@ Rails.application.routes.draw do
   end
 
   root "home#show"
+  get "consent.js", to: "consent#show", format: false, as: :consent_script
   get "version", to: "application#version"
   get "ready",   to: "application#ready"
   get "up",      to: "rails/health#show", as: :rails_health_check

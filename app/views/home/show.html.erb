@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DPP Linter – Digital Product Passport checks</title>
   <link rel="icon" href="/oyd-mark.svg" type="image/svg+xml">
+<% if @google_ads -%>
+  <script src="/consent.js" defer></script>
+<% end -%>
   <style>
     :root { color-scheme: light dark;
             --fg: #1d2330; --muted: #5b6475; --line: #d9dde5; --field: #848c9a; --bg: #ffffff; --panel: #f5f7fa;
@@ -100,7 +103,10 @@
       <a href="/api-docs">API</a>
       <a href="https://github.com/OwnYourData/dpplint">Source</a>
       <a href="https://www.ownyourdata.eu/en/imprint/">Imprint</a>
-      <a href="https://www.ownyourdata.eu/en/privacy-policy/">Privacy</a>
+      <a href="https://dpp-service.ownyourdata.eu/privacy">Privacy</a>
+<% if @google_ads -%>
+      <a href="https://dpp-service.ownyourdata.eu/privacy#conversion-tracking" data-consent-settings hidden>Cookie settings</a>
+<% end -%>
     </div>
     <div class="about">Results report automated checks only. They are no certification and establish no presumption of conformity.
       The DPP Linter is part of a research project and shares what we currently know; the checks make no claim to be complete and are not a legal assessment.
@@ -110,6 +116,8 @@
 </footer>
 <script>
 <%= raw @check_client %></script>
+<script>
+<%= raw @click_ids %></script>
 <script>
   const form = document.getElementById("form");
   const input = document.getElementById("productId");
@@ -165,7 +173,7 @@
     resultEl.innerHTML = "";
     failureEl.hidden = true;
     statusEl.textContent = `Retrieving and checking the passport … (at most ${timeoutMs / 1000}\u00a0s)`;
-    history.replaceState(null, "", "?productId=" + encodeURIComponent(productId));
+    history.replaceState(null, "", DppLintClickIds.queryWithProductId(location.search, productId));
     const fail = (text) => {
       statusEl.textContent = "";
       failureText.textContent = text;
@@ -179,6 +187,9 @@
       if (!outcome.ok) return fail(DppLintCheck.failureText(outcome, timeoutMs));
       statusEl.textContent = "";
       render(outcome.data);
+      // A completed check is a conversion; consent.js sends it only after
+      // consent, and without the product identifier or the result.
+      if (window.oydConsent) window.oydConsent.convert("linter_check");
     } catch (e) {
       fail("The page could not show the result: " + e.message);
     } finally {
