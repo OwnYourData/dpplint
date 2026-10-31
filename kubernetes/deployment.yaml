@@ -26,7 +26,7 @@ spec:
             app: dpplint
       containers:
       - name: dpplint
-        image: oydeu/dpplint@sha256:0eecb124de5c44070067d978eb06e09fee3ea4835d53979094236bf2f61d262d
+        image: oydeu/dpplint@sha256:aa449cae9835fc0c03c29a4956c3de8d5b212eef29b521eecdcdf59b9b336e8f
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
@@ -41,6 +41,10 @@ spec:
           value: "16"
         - name: NU_CHECKER_URL
           value: http://127.0.0.1:8888/
+        - name: GOOGLE_ADS_ID
+          value: ""
+        - name: GOOGLE_ADS_LABEL_LINTER_CHECK
+          value: VeXiCK3G_K4dEM_nrKoD
         resources:
           requests:
             cpu: 100m

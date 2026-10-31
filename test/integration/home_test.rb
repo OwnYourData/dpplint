@@ -38,7 +38,7 @@ class HomeTest < ActionDispatch::IntegrationTest
     assert body.index("</main>") < body.index("<footer>"), "footer outside main, so its line spans the window"
     assert_includes footer, %(<div>Operated by <a href="https://www.ownyourdata.eu/en/">OwnYourData</a></div>)
     assert_includes footer, %(<a href="https://www.ownyourdata.eu/en/imprint/">Imprint</a>)
-    assert_includes footer, %(<a href="https://www.ownyourdata.eu/en/privacy-policy/">Privacy</a>)
+    assert_includes footer, %(<a href="https://dpp-service.ownyourdata.eu/privacy">Privacy</a>)
     assert_includes footer, %(<a href="/api-docs">API</a>)
     assert_includes footer, "Criteria: dpp-criteria"
     assert_includes footer, "The DPP Linter is part of a research project and shares what we currently know; " \
