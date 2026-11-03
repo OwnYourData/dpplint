@@ -111,16 +111,23 @@ complete and are not a legal assessment.
     sheets, fonts, images, frames, preloads, CSS `url()` and `@import`, meta
     refresh); every such URL on another host than the passport's fails the
     criterion. Resources added by scripts at run time are not seen.
-  - With `device_features: forbidden` dpplint searches, without running any
+  - With `device_features: forbidden` dpplint reads, without running any
     script, the inline scripts, event handler attributes and `javascript:`
     URLs of the HTML view and the scripts it loads from its own host (at most
-    10, the first 2 MB of each) for browser interfaces that use functions of
-    the reader's device (location, camera, microphone, notifications,
-    contacts, sensors, network information and others), and the markup for
-    frames granted such permissions, file inputs with `capture` and permission
-    elements. Every finding fails the criterion. Code assembled at run time,
-    obfuscated or loaded by a script, and scripts from other hosts, are not
-    seen; an interface name in a comment or string counts.
+    10, the first 2 MB of each) as JavaScript tokens and looks for uses of
+    functions of the reader's device (location, camera, microphone,
+    notifications, contacts, sensors, network information and others): calls
+    of their browser interfaces, permission requests and listeners for device
+    events; in the markup it looks for frames granted such permissions, file
+    inputs with `capture` and permission elements. Every use fails the
+    criterion. Names in comments and strings, testing whether an interface
+    exists, and hooking into it without a call, as polyfills such as zone.js
+    do, are not a use. A reference after which a use may follow that only
+    running the script would show (an interface stored under another name, a
+    device method read without a call) gives a warning if there is no use;
+    so does a script that cannot be read as JavaScript but names a device
+    interface. Code assembled at run time, obfuscated or loaded by a script,
+    and scripts from other hosts, are not seen.
   - With `markup_errors: forbidden` dpplint posts the HTML view, as received
     and with the media type and charset of the response, to the Nu Html
     Checker that it runs itself (`NU_CHECKER_URL`; see "Deployment"). It never

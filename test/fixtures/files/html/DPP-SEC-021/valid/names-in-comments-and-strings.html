@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Passport</title>
+<script>
+// The passport does not call navigator.geolocation.getCurrentPosition().
+/* Neither navigator.vibrate(200) nor Notification.requestPermission() is used. */
+const note = "No location (getCurrentPosition, watchPosition) and no camera (getUserMedia).";
+const unused = /navigator\.mediaDevices\.getUserMedia\(/;
+document.querySelector("h1").title = `${note} No addEventListener("devicemotion").`;
+</script>
+</head>
+<body>
+<h1>Passport</h1>
+</body>
+</html>
