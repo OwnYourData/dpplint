@@ -42,7 +42,7 @@ spec:
         - name: NU_CHECKER_URL
           value: http://127.0.0.1:8888/
         - name: GOOGLE_ADS_ID
-          value: ""
+          value: AW-894120911
         - name: GOOGLE_ADS_LABEL_LINTER_CHECK
           value: VeXiCK3G_K4dEM_nrKoD
         resources:
