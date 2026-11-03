@@ -26,7 +26,7 @@ spec:
             app: dpplint
       containers:
       - name: dpplint
-        image: oydeu/dpplint@sha256:aa449cae9835fc0c03c29a4956c3de8d5b212eef29b521eecdcdf59b9b336e8f
+        image: oydeu/dpplint@sha256:1400a69cabdfb729eff64ca1cf0ca9139c3329ddc1843466908793b3c2581bc4
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000

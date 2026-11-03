@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Passport</title>
+<script>
+if ("geolocation" in navigator && navigator.geolocation) {
+  document.documentElement.dataset.location = "available";
+}
+const camera = !!navigator.mediaDevices;
+const network = typeof navigator.connection !== "undefined" ? "yes" : "no";
+document.querySelector("h1").dataset.features = [camera, network].join(" ");
+</script>
+</head>
+<body>
+<h1>Passport</h1>
+</body>
+</html>

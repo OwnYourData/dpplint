@@ -13,13 +13,15 @@ require "nokogiri"
 # follow are not counted; resources added by scripts at run time cannot be
 # seen in the document.
 #
-# device_features: forbidden looks, without running any script, for browser
-# interfaces that use functions of the reader's device (DEVICE_INTERFACES) in
-# the inline scripts, event handler attributes and javascript: URLs of the
-# document and in the scripts it loads from its own host (at most MAX_SCRIPTS,
-# the first MAX_SCRIPT_BYTES of each; a script that cannot be retrieved is not
-# checked), and in the markup for frames granted device permissions
-# (DEVICE_PERMISSIONS), file inputs with capture and permission elements.
+# device_features: forbidden looks, without running any script, for uses of
+# functions of the reader's device (DeviceUses: calls, permission requests,
+# listeners, not mere references) in the inline scripts, event handler
+# attributes and javascript: URLs of the document and in the scripts it loads
+# from its own host (at most MAX_SCRIPTS, the first MAX_SCRIPT_BYTES of each;
+# a script that cannot be retrieved is not checked), and in the markup for
+# frames granted device permissions (DEVICE_PERMISSIONS), file inputs with
+# capture and permission elements. A use is a violation; a doubt of DeviceUses
+# without any use is a warning.
 #
 # markup_errors: forbidden sends the document as received to the Nu Html
 # Checker that dpplint runs itself (NuChecker) and reports every message of
@@ -29,19 +31,6 @@ require "nokogiri"
 class HtmlCheck
   Outcome = Struct.new(:skipped, :code, :messages, keyword_init: true)
 
-  DEVICE_INTERFACES = [
-    ["location", /\.geolocation\b|\bgetCurrentPosition\b|\bwatchPosition\b/],
-    ["camera, microphone or screen", /\bgetUserMedia\b|\bgetDisplayMedia\b|\.mediaDevices\b/],
-    ["notifications", /\bNotification\s*\.\s*requestPermission\b|\bnew\s+Notification\s*\(|\.showNotification\s*\(|\b[Pp]ushManager\b/],
-    ["contacts", /\bnavigator\s*\.\s*contacts\b/],
-    ["Bluetooth, USB, serial, HID or NFC", /\bnavigator\s*\.\s*(?:bluetooth|usb|serial|hid)\b|\bNDEFReader\b/],
-    ["motion or orientation sensors",
-     /\b(?:on)?(?:devicemotion|deviceorientation(?:absolute)?)\b|\bDevice(?:Motion|Orientation)Event\s*\.\s*requestPermission\b|\bnew\s+(?:Accelerometer|Gyroscope|Magnetometer|AbsoluteOrientationSensor|RelativeOrientationSensor|LinearAccelerationSensor|GravitySensor|AmbientLightSensor)\s*\(/],
-    ["context or network information", /\bnavigator\s*\.\s*connection\b|\bgetBattery\s*\(|\bIdleDetector\b/],
-    ["one-time codes from SMS", /\bOTPCredential\b|\btransport\s*:\s*\[\s*["']sms["']/],
-    ["app installation", /\bbeforeinstallprompt\b|\bgetInstalledRelatedApps\b/],
-    ["device behaviour", /\bnavigator\s*\.\s*(?:wakeLock|vibrate)\b/]
-  ].freeze
   DEVICE_PERMISSIONS = %w[camera microphone geolocation display-capture bluetooth usb serial hid accelerometer gyroscope
                           magnetometer ambient-light-sensor idle-detection screen-wake-lock].freeze
   JS_TYPES = %w[text/javascript application/javascript application/ecmascript text/ecmascript module
@@ -75,19 +64,16 @@ class HtmlCheck
 
     messages = []
     messages << external_message(res) if @check["external_resources"] == "forbidden"
-    messages << device_message(res) if @check["device_features"] == "forbidden"
+    messages.concat(device_messages(res)) if @check["device_features"] == "forbidden"
     messages << markup_message(res) if @check["markup_errors"] == "forbidden"
     Outcome.new(messages: messages.compact)
   rescue NuChecker::Unavailable => e
     Outcome.new(skipped: e.message, code: "not_evaluated")
   end
 
-  # Device interfaces found in a piece of script: [[label, matched text], …].
+  # Uses of device functions in a piece of script: [[label, what], …].
   def self.device_uses(code)
-    DEVICE_INTERFACES.filter_map do |label, pattern|
-      match = code.to_s.match(pattern)
-      [label, match[0].gsub(/\s+/, " ")] if match
-    end
+    DeviceUses.call(code).select { |f| f.kind == :use }.map { |f| [f.label, f.text] }
   end
 
   def self.javascript_type?(type)
@@ -176,16 +162,27 @@ class HtmlCheck
       message: "the HTML view loads #{external.size} resource(s) from other hosts than #{own}: #{listed.join(', ')}#{more}" }
   end
 
-  def device_message(res)
+  # A violation for the uses found, and a warning for the doubts if there is
+  # no use.
+  def device_messages(res)
     doc = Nokogiri::HTML5(res.body.to_s)
-    findings = markup_findings(doc) + inline_findings(doc) + script_findings(doc, res.url.to_s)
-    return nil if findings.empty?
+    found = markup_findings(doc) + inline_findings(doc) + script_findings(doc, res.url.to_s)
+    uses = found.select { |kind, _| kind == :use }.map(&:last)
+    return [device_message("violation", "the HTML view uses functions of the reader's device", uses)] if uses.any?
 
-    listed = findings.first(MAX_FINDINGS)
-    more = findings.size > MAX_FINDINGS ? " and #{findings.size - MAX_FINDINGS} more" : ""
-    { severity: "violation", message: "the HTML view uses functions of the reader's device: #{listed.join('; ')}#{more}" }
+    doubts = found.map(&:last)
+    return [] if doubts.empty?
+
+    [device_message("warning", "no use of functions of the reader's device was found, but the HTML view may use them", doubts)]
   end
 
+  def device_message(severity, text, findings)
+    listed = findings.first(MAX_FINDINGS)
+    more = findings.size > MAX_FINDINGS ? " and #{findings.size - MAX_FINDINGS} more" : ""
+    { severity: severity, message: "#{text}: #{listed.join('; ')}#{more}" }
+  end
+
+  # Findings in the markup: [[:use, text], …].
   def markup_findings(doc)
     found = []
     doc.css("iframe[allow]").each do |e|
@@ -194,7 +191,7 @@ class HtmlCheck
     end
     found << "file input with capture" if doc.css("input[capture]").any?
     %w[permission geolocation].each { |name| found << "#{name} element" if doc.css(name).any? }
-    found
+    found.map { |f| [:use, f] }
   end
 
   def inline_findings(doc)
@@ -202,7 +199,7 @@ class HtmlCheck
     doc.css("script").each_with_index do |e, i|
       next if e["src"] || !self.class.javascript_type?(e["type"])
 
-      self.class.device_uses(e.content).each { |label, use| found << "#{label} (#{use} in inline script #{i + 1})" }
+      found.concat(script_uses(e.content, "inline script #{i + 1}"))
     end
     doc.xpath("//@*").each do |a|
       name = a.name.downcase
@@ -211,7 +208,7 @@ class HtmlCheck
              end
       next unless code
 
-      self.class.device_uses(code).each { |label, use| found << "#{label} (#{use} in attribute #{name} of #{a.parent.name})" }
+      found.concat(script_uses(code, "attribute #{name} of #{a.parent.name}"))
     end
     found
   end
@@ -227,8 +224,15 @@ class HtmlCheck
       res = @resolver.get(url, accept: "*/*")
       next [] unless res.success?
 
-      self.class.device_uses(res.body.to_s.byteslice(0, MAX_SCRIPT_BYTES).to_s.dup.force_encoding(Encoding::UTF_8).scrub).map { |label, use| "#{label} (#{use} in #{url})" }
+      body = res.body.to_s
+      code = body.byteslice(0, MAX_SCRIPT_BYTES).to_s.dup.force_encoding(Encoding::UTF_8).scrub
+      script_uses(code, url, partial: body.bytesize > MAX_SCRIPT_BYTES)
     end
+  end
+
+  # [[:use or :doubt, "label (what in place)"], …]
+  def script_uses(code, place, partial: false)
+    DeviceUses.call(code, partial: partial).map { |f| [f.kind, "#{f.label} (#{f.text} in #{place})"] }
   end
 
   # Errors of the Nu Html Checker, with their line: "line 12: message".

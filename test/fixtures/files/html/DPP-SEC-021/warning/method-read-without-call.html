@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Passport</title>
+<script>
+const locate = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+document.querySelector("button").addEventListener("click", () => locate(console.log));
+</script>
+</head>
+<body>
+<h1>Passport</h1>
+<button type="button">Where am I?</button>
+</body>
+</html>
